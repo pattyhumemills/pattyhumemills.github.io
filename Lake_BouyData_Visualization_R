@@ -1,0 +1,172 @@
+#############################################################
+#
+# Author: Patty Mills
+# Date: March 17, 2019
+# Purpose: Viz-a-thon
+# Column header meanings: 
+#     DATE_TIME: date and timestamp of measurement
+#     DEPTH_m: Depth of measurement in meters
+#     T_DEGC: Temperature in degrees centigrade
+#     SC_us_cm: Specific conductance (microSiemens per centimeter)
+#     pH: self-explanatory
+#     Dox_mg_L: Dissolved oxygen in milligrams per liter
+#     Tn_Ntu: Turbidity (nephelometric turbidity units)
+#     Chl_ug_L: Chlorophyll-a in micrograms per liter
+#     PRECIP_in: Daily total precipitation in inches
+#     AWND_mph: Daily average windspeed in miles per hour
+#     WDF5_deg: Direction of 5 second maximum wind speed in degrees from true north
+#     WSF5_mph: 5 second maximum wind speed in miles per hour
+#
+#############################################################
+# Read in the data.
+my.viz.dir <- "C:\\Users\\patty\\OneDrive\\IST719 Winter 2020\\Viz-a-Thon\\"
+my.viz.file <- "BuoyData_2_2_2.csv"
+buoy <- read.csv(file=paste0(my.viz.dir,my.viz.file), header = TRUE, stringsAsFactors = FALSE)
+
+# Get an idea of the structure of the data
+str(buoy)
+head(buoy)
+summary(buoy)
+buoy$DATE_TIME <- as.POSIXct(buoy$DATE_TIME,format = "%m/%d/%Y %H:%M")
+buoy$DATE_TIME <- as.Date(buoy$DATE_TIME,format = "%m/%d/%Y %H:%M")
+
+# NA handling replacing NAs with column mean
+any(is.na(buoy))
+buoy$pH[is.na(buoy$pH)] <- mean(buoy$pH,na.rm=TRUE)  
+buoy$Dox_mg_L[is.na(buoy$Dox_mg_L)] <- mean(buoy$Dox_mg_L,na.rm=TRUE)
+buoy$Tn_Ntu[is.na(buoy$Tn_Ntu)] <- mean(buoy$Tn_Ntu,na.rm=TRUE)
+buoy$Chl_ug_L[is.na(buoy$Chl_ug_L)] <- mean(buoy$Chl_ug_L,na.rm=TRUE)
+
+head(buoy)
+
+# Create a second dataframe without date
+buoy2 <- buoy[,-1]
+buoy2$DEPTH_m <-as.numeric(buoy2$DEPTH_m)
+buoy2$SC_us_cm <-as.numeric(buoy2$SC_us_cm)
+buoy2$WDF5_deg <-as.numeric(buoy2$WDF5_deg)
+
+# Create a time-series plot of the Dox_mg_L by date
+library(ggplot2)
+library(ggthemes)
+theme_set(theme_economist())
+# Line
+ggplot(buoy, aes(x=DATE_TIME,y=Dox_mg_L)) + 
+  geom_line() +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Dissolved Oxygen Measurements at South Deep Station") +
+  xlab("") +
+  ylab("milligrams per liter") +
+  theme(axis.text.x = element_text(angle = 0, hjust = .25)) +
+  scale_x_date(date_breaks = "3 month", date_labels = "%m/%m/%Y")
+# Dot with Loess smoothing and red lines to indicate healthy levels for Dox_mg_L
+ggplot(buoy, aes(x=DATE_TIME,y=Dox_mg_L)) + 
+  geom_point(color = "skyblue1") +
+  geom_smooth(method = "loess", color = "navy", size = 1.5) +
+  geom_hline(aes(yintercept = 6.5), col = "darkred",size = 2) +
+  geom_hline(aes(yintercept = 8), col = "darkred",size = 2) +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Dissolved Oxygen Measurements at South Deep Station") +
+  xlab("") +
+  ylab("milligrams per liter") +
+  theme(axis.text.x = element_text(angle = 0, hjust = .25)) +
+  scale_x_date(date_breaks = "3 month", date_labels = "%m/%m/%Y")
+
+# Scatter smooth look at pH
+ggplot(buoy, aes(x=DATE_TIME,y=pH)) + 
+  geom_point(color = "skyblue1") +
+  geom_smooth(method = "loess", color = "navy", size = 1.5) +
+  geom_hline(aes(yintercept = 6), col = "darkred",size = 2) +
+  geom_hline(aes(yintercept = 8), col = "darkred",size = 2) +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "pH level at South Deep Station") +
+  xlab("") +
+  ylab("pH") +
+  theme(axis.text.x = element_text(angle = 0, hjust = .25)) +
+  scale_x_date(date_breaks = "3 month", date_labels = "%m/%m/%Y")
+
+# Histogram of the Chl_ug_L
+theme_set(theme_economist())
+ggplot(aes(x=Chl_ug_L),data = buoy) +
+  geom_histogram(binwidth = 1,color="navy", fill = "blue3") +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Chlorophyll-A Measurements at South Deep Station") +
+  xlab("micrograms per liter") +
+  geom_vline(aes(xintercept=20),col="darkred",size = 2) +
+  geom_vline(aes(xintercept=40),col="darkred",size = 2)
+
+# Histogram of the SC_us_cm, no healthy range on this as I could not find one
+theme_set(theme_economist())
+ggplot(aes(x=SC_us_cm),data = buoy) +
+  geom_histogram(binwidth = 25,color="navy", fill = "blue3") +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Specific Conductance Measurements at South Deep Station") +
+  xlab("microSiemens per centimeter") 
+
+# Histogram of Tn_Ntu
+theme_set(theme_economist())
+ggplot(aes(x=Tn_Ntu),data = buoy) +
+  geom_histogram(binwidth = 1,color="navy", fill = "blue2") +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Turbidity at South Deep Station") +
+  xlab("nephelometric turbidity units") +
+  labs(caption = "Lower Ntu is clearer water.")
+
+# Dot plot pH by Chl_ug_L with Dox_mg_L for color
+ggplot(buoy, aes(x=pH,y=Chl_ug_L)) +
+  geom_point(aes(color = Dox_mg_L, alpha = .1)) +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Chlorophyll-A by pH and Dissolved Oxygen at South Deep Station") +
+  ylab("micrograms per liter")
+
+agg.pH <- aggregate(buoy$pH,list(buoy$PRECIP_in),mean)
+colnames(agg.pH) <- c('PRECIP_in','avg_pH')
+
+# Dot plot pH by PRECIP_in
+ggplot(agg.pH, aes(x=avg_pH,y=PRECIP_in)) +
+  geom_point(aes(color = avg_pH, alpha = .1)) +
+  ggtitle("Onondaga Lake Water Quality Monitoring Buoy", subtitle = "Precipitation by average pH at South Deep Station") +
+  ylab("inches")
+
+# Correlation matrix
+corr <- round(cor(buoy2), 1)
+
+# Plot Correlogram
+library(ggcorrplot)
+ggcorrplot(corr, hc.order = TRUE, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="circle", 
+           colors = c("lightskyblue", "white", "navy"), 
+           title="Correlogram of buoy2", 
+           ggtheme=theme_bw)
+
+# Linear regression modeling to find predictors of pH -- doesn't eliminate much. 
+# Create dataframe to remove DEPTH_m because of correlation with several variables and AWND_mph due to correlation with WSF5_mph
+pHdf <- buoy2[,-1]
+pHdf <- pHdf[,-8]
+str(pHdf)
+
+allinmodel <- lm(formula= pH ~.,data=pHdf)
+summary(allinmodel)
+step(allinmodel,data=pHdf,direction="backward")
+parsimonious <- lm(formula = pH ~ T_DEGC + SC_us_cm + Dox_mg_L + Tn_Ntu + Chl_ug_L + 
+                     WDF5_deg, data = pHdf)
+summary(parsimonious)
+
+# Linear regression modeling to find predictors of Dox_mg_L -- doesn't eliminate much
+# Create dataframe to remove DEPTH_m because of correlation with several variables and AWND_mph due to correlation with WSF5_mph
+doxdf <- buoy2[,-1]
+doxdf <- doxdf[,-8]
+str(doxdf)
+allinmodeldox <- lm(formula= Dox_mg_L ~.,data=doxdf)
+summary(allinmodeldox)
+step(allinmodeldox,data=doxdf,direction="backward")
+parsimoniousdox <- lm(formula = Dox_mg_L ~ T_DEGC + SC_us_cm + pH + Tn_Ntu + Chl_ug_L + 
+                        PRECIP_in + WDF5_deg + WSF5_mph, data = doxdf)
+summary(parsimoniousdox)
+
+# Linear regression modeling to find predictors of Chl_ug_L -- doesn't eliminate much
+# Create dataframe to remove DEPTH_m because of correlation with several variables and AWND_mph due to correlation with WSF5_mph
+chldf <- buoy2[,-1]
+chldf <- chldf[,-8]
+str(chldf)
+allinmodelchl <- lm(formula= Chl_ug_L ~.,data=chldf)
+summary(allinmodelchl)
+step(allinmodelchl,data=chldf,direction="backward")
+parsimoniouschl <-lm(formula = Chl_ug_L ~ T_DEGC + SC_us_cm + pH + Dox_mg_L + Tn_Ntu + 
+                       PRECIP_in + WDF5_deg, data = chldf)
+summary(parsimoniouschl)
