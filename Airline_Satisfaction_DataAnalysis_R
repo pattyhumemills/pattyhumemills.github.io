@@ -1,0 +1,466 @@
+# Set working directory. 
+setwd("C:/Users/Patty/Desktop/Syracuse/Grad School/IST687 Fall 2019/Project")
+
+# Install packages and load libraries used
+install.packages("ggcorrplot")
+install.packages("arules")
+install.packages("arulesViz")
+install.packages("ggplot2")
+install.packages("neuralnet")
+install.packages("kernlab")
+install.packages("e1071")
+install.packages("gridExtra")
+install.packages("plyr")
+install.packages("randomForest")
+library(ggplot2)
+library(ggcorrplot)
+library(neuralnet)
+library(kernlab)
+library(e1071)
+library(gridExtra)
+library(arules)
+library(arulesViz)
+library(plyr)
+library(randomForest)
+
+# Import and munging function
+readSatisfaction <- function(csv){
+  survey <- read.csv(csv) 			# read in the csv
+  survey <- survey[52714:63681,]		# retain only the rows related to Oursin Airlines
+  # Set variables as factor, numeric, dates
+  survey$Satisfaction <- as.numeric(survey$Satisfaction)
+  survey$Airline.Status <- as.factor(survey$Airline.Status)
+  survey$Gender <- as.factor(survey$Gender)
+  survey$Type.of.Travel <- as.factor(survey$Type.of.Travel)
+  survey$Class <- as.factor(survey$Class)
+  survey$Flight.date <- as.Date(survey$Flight.date, format="%m/%d/%Y")
+  survey$Airline.Code <- as.factor(survey$Airline.Code)
+  survey$Airline.Name <- as.factor(survey$Airline.Name)
+  survey$Orgin.City <- as.factor(survey$Orgin.City)
+  survey$Origin.State <- as.factor(survey$Origin.State)
+  survey$Destination.City <- as.factor(survey$Destination.City)
+  survey$Destination.State <- as.factor(survey$Destination.State)
+  survey$Flight.cancelled <- as.factor(survey$Flight.cancelled)
+  survey$Arrival.Delay.greater.5.Mins <- as.factor(survey$Arrival.Delay.greater.5.Mins)
+  # corrects spelling of Orgin.City to Origin.City
+  colnames(survey)[colnames(survey)=="Orgin.City"] <- "Origin.City"
+  return(survey)}
+
+# Call function and create a dataframe
+satisSurvey <- readSatisfaction("C:/Users/Patty/Desktop/Syracuse/Grad School/IST687 Fall 2019/Project/SatisfactionSurvey.csv")
+
+# Check structure of dataframe
+str(satisSurvey)
+
+# Create a second dataframe that removes Origin City and Destination City for use with Random Forest
+satisSurvey2 <- satisSurvey[ ,-c(18,20)]
+
+# Check structure of 2nd dataframe
+str(satisSurvey2)
+
+# Check the first 5 rows of data in the 2nd dataframe
+head(satisSurvey2)
+
+# Replace NAs for Departure Delay with 0
+satisSurvey2$Departure.Delay.in.Minutes[is.na(satisSurvey2$Departure.Delay.in.Minutes)] <- 0
+
+# Replace NAs for Arrival Delay with 0
+satisSurvey2$Arrival.Delay.in.Minutes[is.na(satisSurvey2$Arrival.Delay.in.Minutes)] <- 0
+
+# Replace NAs for Flight Time with 0 because these are cancelled flights
+satisSurvey2$Flight.time.in.minutes[is.na(satisSurvey2$Flight.time.in.minutes)] <- 0 
+any(is.na(satisSurvey2))
+
+# Create a second function to read in the full Satisfaction Survey with every thing the same except removing rows.
+readSatisfaction2 <- function(csv){
+  survey <- read.csv(csv)
+  survey$Satisfaction <- as.numeric(survey$Satisfaction)
+  survey$Airline.Status <- as.factor(survey$Airline.Status)
+  survey$Gender <- as.factor(survey$Gender)
+  survey$Type.of.Travel <- as.factor(survey$Type.of.Travel)
+  survey$Class <- as.factor(survey$Class)
+  survey$Flight.date <- as.Date(survey$Flight.date, format="%m/%d/%Y")
+  survey$Airline.Code <- as.factor(survey$Airline.Code)
+  survey$Airline.Name <- as.factor(survey$Airline.Name)
+  survey$Orgin.City <- as.factor(survey$Orgin.City)
+  survey$Origin.State <- as.factor(survey$Origin.State)
+  survey$Destination.City <- as.factor(survey$Destination.City)
+  survey$Destination.State <- as.factor(survey$Destination.State)
+  survey$Flight.cancelled <- as.factor(survey$Flight.cancelled)
+  survey$Arrival.Delay.greater.5.Mins <- as.factor(survey$Arrival.Delay.greater.5.Mins)
+  colnames(survey)[colnames(survey)=="Orgin.City"] <- "Origin.City"
+  return(survey)}
+
+# Read in full survey and check structure
+fullSurvey <- readSatisfaction2("C:/Users/Patty/Desktop/Syracuse/Grad School/IST687 Fall 2019/Project/SatisfactionSurvey.csv")
+str(fullSurvey)
+
+# Creating RandomForest
+data_set_size = floor(nrow(satisSurvey2)*0.75)
+index <- sample(1:nrow(satisSurvey2), size = data_set_size)
+training<- satisSurvey2[index,]
+testing <- satisSurvey2[-index,]
+rftraining <- randomForest(Satisfaction ~., data=training, mtry=4, ntree=800, importance=TRUE )
+rftraining
+varImpPlot(rftraining, main = " ", pch = 20, col = "darkblue")
+rftesting <- randomForest(Satisfaction ~., data=testing, mtry=4, ntree=800, importance=TRUE, na.action = na.omit)
+varImpPlot(rftesting, main = " ", pch = 20, col = "darkblue")
+
+# Create a new function to build a dataframe for only prediction models where categorical data is changed to numerical for the top 8 factors identified by the Random Forest.
+prediction <- function(df) {
+  newDF <- df
+  newDF$Type.of.Travel <- as.character(newDF$Type.of.Travel)
+  newDF$Airline.Status <- as.character(newDF$Airline.Status)
+  newDF$Gender <- as.character(newDF$Gender)
+  newDF$Arrival.Delay.greater.5.Mins <- as.character(newDF$Arrival.Delay.greater.5.Mins)
+  newDF$Type.of.Travel[newDF$Type.of.Travel=="Business travel"] <-1
+  newDF$Type.of.Travel[newDF$Type.of.Travel=="Personal Travel"] <-2
+  newDF$Type.of.Travel[newDF$Type.of.Travel=="Mileage tickets"] <-3
+  newDF$Airline.Status[newDF$Airline.Status=="Blue"]<-1
+  newDF$Airline.Status[newDF$Airline.Status=="Gold"]<-2
+  newDF$Airline.Status[newDF$Airline.Status=="Platinum"]<-3
+  newDF$Airline.Status[newDF$Airline.Status=="Silver"]<-4
+  newDF$Gender[newDF$Gender=="Male"]<-1
+  newDF$Gender[newDF$Gender=="Female"]<-2
+  newDF$Arrival.Delay.greater.5.Mins[newDF$Arrival.Delay.greater.5.Mins=="yes"]<-1
+  newDF$Arrival.Delay.greater.5.Mins[newDF$Arrival.Delay.greater.5.Mins=="no"]<-0
+  newDF$Type.of.Travel <- as.numeric(newDF$Type.of.Travel)
+  newDF$Airline.Status <- as.numeric(newDF$Airline.Status)
+  newDF$Gender <- as.numeric(newDF$Gender)
+  newDF$Arrival.Delay.greater.5.Mins <- as.numeric(newDF$Arrival.Delay.greater.5.Mins)
+  newDF$Departure.Delay.in.Minutes[is.na(newDF$Departure.Delay.in.Minutes)] <- 0
+  newDF$Arrival.Delay.in.Minutes[is.na(newDF$Arrival.Delay.in.Minutes)] <- 0
+  newDF$Flight.time.in.minutes[is.na(newDF$Flight.time.in.minutes)] <- 0 
+  newDF <- newDF[,-6]
+  newDF <- newDF[,-7]
+  newDF <- newDF[,-8:-20]
+  newDF <- newDF[,-10:-12]
+  return(newDF)
+}
+
+# Create the new DF.
+predictDF <- prediction(satisSurvey)
+
+# Check structure of the predictDF
+str(predictDF)
+any(is.na(predictDF$Type.of.Travel))
+
+# Create a new DF and rename columns.
+actionable2 <- data.frame(satisSurvey2$Satisfaction,satisSurvey2$Price.Sensitivity,satisSurvey2$Departure.Delay.in.Minutes, satisSurvey2$Arrival.Delay.in.Minutes,satisSurvey2$No.of.Flights.p.a., satisSurvey2$Flight.time.in.minutes,satisSurvey2$Type.of.Travel, satisSurvey2$Age, satisSurvey2$Origin.State, satisSurvey2$Destination.State, satisSurvey2$Airline.Status)
+colnames(actionable2)
+acnames <- colnames(actionable2)
+acnames[1] <- "Satisfaction"
+acnames[2] <- "Price.Sensitivity"
+acnames[3] <- "Departure.Delay.in.Minutes"
+acnames[4] <- "Arrival.Delay.in.Minutes"
+acnames[5] <- "Number.of.Flights.Per.Year"
+acnames[6] <- "Flight.Time.in.Minutes"
+acnames[7] <- "Type.of.Travel"
+acnames[8] <- "Age"
+acnames[9] <- "Origin.State"
+acnames[10] <- "Destination.State"
+acnames[11] <- "Airline.Status"
+colnames(actionable2) <- acnames
+colnames(actionable2)
+str(actionable2)
+actionable2$`Price.Sensitivity` <- as.numeric(actionable2$`Price.Sensitivity`)
+actionable2$`Number.of.Flights.Per.Year` <- as.numeric(actionable2$`Number.of.Flights.Per.Year`)
+actionable2$`Age`<- as.numeric(actionable2$`Age`)
+str(actionable2)
+
+# Create a function to find mean, standard deviation, and standard error of the mean -- Code from http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+  
+  
+  # New version of length which can handle NA's: if na.rm==T, don't count them
+  length2 <- function (x, na.rm=FALSE) {
+    if (na.rm) sum(!is.na(x))
+    else       length(x)
+  }
+  
+  # This does the summary. For each group's data frame, return a vector with
+  # N, mean, and sd
+  datac <- ddply(data, groupvars, .drop=.drop,
+                 .fun = function(xx, col) {
+                   c(N    = length2(xx[[col]], na.rm=na.rm),
+                     mean = mean   (xx[[col]], na.rm=na.rm),
+                     sd   = sd     (xx[[col]], na.rm=na.rm)
+                   )
+                 },
+                 measurevar
+  )
+  
+  # Rename the "mean" column    
+  datac <- rename(datac, c("mean" = measurevar))
+  
+  datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+  
+  # Confidence interval multiplier for standard error
+  # Calculate t-statistic for confidence interval: 
+  # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+  ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+  datac$ci <- datac$se * ciMult
+  
+  return(datac)
+}
+
+# Stores results of summarySE function in new dataframe
+meansAirline <- summarySE(fullSurvey, measurevar="Satisfaction",groupvars="Airline.Name")
+
+# Creates plot of means for airline satisfaction across all airlines
+plotofSatisfactionmeans <- ggplot(meansAirline,aes(x=Airline.Name,y=Satisfaction,colour=Airline.Name)) + 
+  geom_errorbar(aes(ymin=Satisfaction-se, ymax=Satisfaction+se),colour="black",width=.2) + 		# Creates the error bar and sets the y minimum to be the mean - standard error of mean and the y maximum to be mean + standard error of mean
+  geom_line() + 							# Creates a line from min to max
+  geom_point(size=3) + 						# Sets the point size for the mean
+  xlab("Airline.Name") + 						# Labels the x axis
+  ylab("Satisfaction") +						# Labels the y axis 
+  scale_colour_hue(name="Airline",l=40) + 			# Sets the colors darker than standard
+  ggtitle("Means of Satisfaction by Airline") + 			# Title of the plot
+  expand_limits(y=4.5) + scale_y_continuous(breaks=4.5:40*.2) + 	# focuses plot and sets the intervals for the y axis
+  theme_bw() + 
+  theme(legend.justification=c(1,0),legend.position=c(1,0)) + 	# positions legend in lower right corner
+  guides(col = guide_legend(nrow=7)) +				# splits the legend into 2 columns
+  theme(axis.text.x = element_text(angle = 75, hjust = 1)) 	# rotates the x axis labels 75%
+plotofSatisfactionmeans
+
+# Histogram of satisfaction scores for our airline
+satisHist <- ggplot(satisSurvey2,aes(x=Satisfaction,fill= cut(Satisfaction,10))) + geom_histogram(bins=10, show.legend = FALSE) + ggtitle("Histogram of Satisfaction")
+satisHist
+
+# Histogram of the types of travelers for our airline
+travelHist <- ggplot(satisSurvey2,aes(x=Type.of.Travel,fill=Type.of.Travel)) + geom_bar() + ggtitle("Type of Travel Histogram")
+travelHist
+
+# Boxplot of satisfaction based on the type of travel.
+satisBox <- ggplot(satisSurvey2,aes(x=Type.of.Travel,y=Satisfaction)) + geom_boxplot(outlier.color = "dark red", outlier.shape=8,outlier.size=3, notch = FALSE) + ggtitle("Boxplot of Satisfaction by Type of Travel")
+satisBox
+
+# Pie Chart of the gender of survey takers for Oursin Airlines Inc.
+genderPie <- ggplot(satisSurvey2,aes(x=factor(1),fill= Gender)) + geom_bar(width=1) + coord_polar("y") + ggtitle("Gender of Survey Takers")
+genderPie
+
+#we are going to use a heatmap to understand the type of traveler with the highest and lowest satisfaction by using their Age as a gauge
+totheat <- ggplot(actionable2, aes(x=Satisfaction,y=Type.of.Travel)) + geom_tile(aes(fill=Age)) + scale_fill_gradient(low="white", high="blue") + ggtitle("Type of Travel Heatmap")
+totheat
+#The heatmap shows that in our airline, the most dissatisfied traveler is in the personal travel category. Older folks (between Ages 50-85+) that travel with us seem to be most of the dissatisfied customers, followed by those in the Business Travel category (Ages 20-50), and lastly, those in the Mileage Tickets category (Ages 20-70).
+#From this, we can infer that most of our Mileage Ticket customer is more satisfied than our two other categories. We should use this information to create a targeted survey towards the age groups identified within the Business and Personal travel categories and see what the driver is to promote satisfaction among these travelers.
+
+#Satisfaction among travelers that experience either arrival or departure delay is also important, which is why we are using a scatter plot to identify which type of traveler is most & least satisfied when experiencing heavy, to little or no delays.
+totscatter<- ggplot(actionable2,aes(x=Departure.Delay.in.Minutes, y=Satisfaction)) + geom_point(aes(size=Arrival.Delay.in.Minutes, color=Type.of.Travel)) + ggtitle("Type of Travel Scatter Plot with Arrival and Departure Delays")
+totscatter
+#The results show that business travelers are among the type of travelers that are most satisfied regardless of departure or arrival delays. Those in the Personal Travel are the most dissatisfied regardless of arrival or departure delays. From this we can also infer that our airline appeals more to our Business Travel customers, and not as much to our Personal Travel.
+#Most Business Travelers rate us above a 5 in satisfaction, while most Personal Travelers rate us lower than 2.5 in satisfaction. We can use this information to create an opportunity for our airline to make the personal traveler feel like we are a personal airline. Maintain our current position that attracts the business traveler but mold the experience to reflect the same values as our personal travelers.
+#From this we can see that Mileage ticket travelers are basically not a huge part of our category. It may very well be that it is because our rewards program is either too stringent on the personal traveler, or the perks are not worth the price for travelers who are not traveling on Business.
+totheat2<- ggplot(actionable2, aes(x=Arrival.Delay.in.Minutes,y=Departure.Delay.in.Minutes)) + geom_tile(aes(fill=Satisfaction)) + scale_fill_gradient(low="red", high="blue") + ggtitle("Delays Heatmap")
+totheat2
+Totscatter2<- ggplot(actionable2,aes(x=Price.Sensitivity, y=Satisfaction)) + geom_point(aes(size=Arrival.Delay.in.Minutes, color=Satisfaction)) + ggtitle("Price Sensitivity Scatter Plot with Arrival Delays")
+Totscatter2
+Totscatter3<- ggplot(actionable2,aes(x=Price.Sensitivity, y=Satisfaction)) + geom_point(aes(size=Departure.Delay.in.Minutes, color=Satisfaction)) + ggtitle("Price Sensitivity Scatter Plot with Departure Delays")
+Totscatter3
+
+# Heat map plotting satisfaction by age with fill by Arrival Delay
+aheat <- ggplot(actionable2, aes(x=Age,y=Satisfaction)) + geom_tile(aes(fill=Arrival.Delay.in.Minutes)) + scale_fill_gradient(low = "green", high="red") + ggtitle("Satisfaction Against Arrival Delay")
+aheat
+
+# Heat map plotting Satisfaction by Arrival Delay fill by Age
+aheat1 <- ggplot(actionable2, aes(x=Satisfaction,y= Arrival.Delay.in.Minutes)) + geom_tile(aes(fill=Age)) + scale_fill_gradient(low = "green", high="red") + ggtitle("Satisfaction Against Arrival Delay")
+aheat1
+
+# Heat map plotting Arrival Delay by Origin State with fill by Satisfaction
+aheat2 <- aheat <- ggplot(actionable2, aes(x=Origin.State,y=Arrival.Delay.in.Minutes)) + geom_tile(aes(fill=Satisfaction)) + scale_fill_gradient(low = "red", high="green") + ggtitle("State versus Against Arrival Delay") + theme(axis.text.x = element_text(angle = 75, hjust = 1))
+aheat2
+
+# Heat map plotting Departure Delay by Origin State with fill by Satisfaction
+aheat4 <- ggplot(actionable2, aes(x=Origin.State,y=Departure.Delay.in.Minutes)) + geom_tile(aes(fill=Satisfaction)) + scale_fill_gradient(low = "red", high="green") + ggtitle("State Against Departure Delay")+ theme(axis.text.x = element_text(angle = 75, hjust = 1))
+aheat4
+
+# Heat map plotting satisfaction by age with fill by Departure Delay
+aheat5 <- ggplot(actionable2, aes(x=Age,y=Satisfaction)) + geom_tile(aes(fill=Departure.Delay.in.Minutes)) + scale_fill_gradient(low = "green", high="red") + ggtitle("Satsifaction Against Departure Delay")
+aheat5
+
+# Scatter plot Arrival Delay by Type of Travel with Satisfaction indicated by size and color of the dot.
+ascatter1 <- ggplot(actionable2,aes(x=Type.of.Travel, y=Arrival.Delay.in.Minutes)) + geom_point(aes(size=Satisfaction, color=Satisfaction)) + ggtitle("Type of Travel Scatter Plot with State and Arrival Delay with Satisfaction")
+ascatter1
+
+# Scatter plot Departure Delay by Type of Travel with Satisfaction indicated by size and color of the dot.
+ascatter2 <- ggplot(actionable2,aes(x=Type.of.Travel, y=Departure.Delay.in.Minutes)) + geom_point(aes(size=Satisfaction, color=Satisfaction)) + ggtitle("Type of Travel Scatter Plot with State and Departure Delay with Satisfaction")
+ascatter2
+
+# Scatter plot Departure Delay by Origin State with color indicating Type of Travel and Size indicating Satisfaction 
+ascatter3 <- ggplot(actionable2,aes(x=Origin.State, y=Departure.Delay.in.Minutes)) + geom_point(aes(size=Satisfaction, color=Type.of.Travel)) + ggtitle("Origin State and Departure Delay Scatter Plot with Satisfaction and Type of Travel") + theme(axis.text.x = element_text(angle = 75, hjust = 1))
+ascatter3
+
+# Histogram for price senstivity
+priceSensitivity <- ggplot(satisSurvey2,aes(x=Price.Sensitivity,fill=Price.Sensitivity)) +
+  geom_bar() +
+  ggtitle("Price Sensitivity Histogram")
+priceSensitivity
+
+# Correlation matrix
+corr <- round(cor(predictDF), 1)
+
+# Plot Correlogram
+ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE, lab_size = 3, method="circle", colors = c("tomato2", "white", "springgreen3"), title="Correlogram of predictDF", ggtheme=theme_bw)
+
+# Create a linear model for the factors identified by Random Forest.
+# Due to colinearity identified by the correlogram, I only included Arrival.Delay.in.Minutes and not Departure Delay, Arrival Delay greater than 5 minutes.
+mSatis1 <- lm(formula = Satisfaction ~ Type.of.Travel + Price.Sensitivity + Gender + Airline.Status + Age + Arrival.Delay.in.Minutes + No.of.Flights.p.a., data = predictDF)
+summary(mSatis1)
+
+# Due to colinearity identified by the correlogram, I only included Arrival.Delay.greater.5.Mins and not Departure Delay, Arrival Delay in Minutes.
+mSatis2 <- lm(formula = Satisfaction ~ Type.of.Travel + Price.Sensitivity + Gender + Arrival.Delay.greater.5.Mins + Airline.Status + Age + No.of.Flights.p.a., data = predictDF)
+summary(mSatis2)
+
+# Created a linear model for just arrival delays.
+mSatis3 <- lm(formula = Satisfaction ~ Arrival.Delay.in.Minutes, data = predictDF)
+summary(mSatis3)
+
+# Use step to find the best Linear Model for the predictDF dataset.
+allinmodel <- lm(formula= Satisfaction ~.,data=predictDF)
+step(allinmodel,data=predictDF,direction="backward")
+parsimonious <- lm(formula = Satisfaction ~ Price.Sensitivity + No.of.Flights.p.a. + Age + Arrival.Delay.greater.5.Mins + Gender + Type.of.Travel + Airline.Status, data = predictDF)
+summary(parsimonious)
+
+# Create a framework for the Plot of Neural Network errors.
+lmPlot <- data.frame(parsimonious$residuals,projecttesting$Age,projecttesting$Type.of.Travel)
+colnames(lmPlot) <- c("error","Age","Type.of.Travel")
+head(lmPlot)
+
+# Compute the RMSE for the parsimonious linear model
+sumResiduals <- sum(abs(parsimonious$residuals)^2)
+meanResiduals <- sumResiduals/length(parsimonious$residuals)
+RMSE.lm <- sqrt(meanResiduals)
+RMSE.lm
+
+# Create testing and training datasets for the prediction models other than linear model
+randIndexproject <- sample(1:dim(predictDF)[1])
+head(randIndexproject)
+length(randIndexproject)
+cutpoint2_3 <- floor(2*dim(predictDF)[1]/3)
+cutpoint2_3
+projecttraining <- predictDF[randIndexproject[1:cutpoint2_3],]
+dim(projecttraining)
+head(projecttraining)
+projecttesting <- predictDF[randIndexproject[(cutpoint2_3+1):dim(predictDF)[1]],]
+dim(projecttesting)
+head(projecttesting)
+names(predictDF)
+
+# Create a neural network
+projectnet <- neuralnet(Satisfaction ~ Airline.Status + Age + Gender + Price.Sensitivity + No.of.Flights.p.a. + Type.of.Travel + Departure.Delay.in.Minutes + Arrival.Delay.in.Minutes + Arrival.Delay.greater.5.Mins, projecttraining, hidden=4,lifesign="minimal", linear.output=TRUE, threshold=0.1)
+plot(projectnet)
+projectnet$result.matrix
+
+# Use the neural network to predict the tests data
+projectnetTestPredictions <- predict(projectnet,projecttesting,rep=1,all.units = FALSE)
+
+# Compare the neural network responses to the actual satisfaction
+projectnetTestCompare <- data.frame(projecttesting$Satisfaction,projectnetTestPredictions)
+head(projectnetTestCompare)
+
+# Add the error for the Neural Network to the projectnetTestCompare dataframe.
+projectnetTestCompare$error <- abs(projectnetTestCompare$projecttesting.Satisfaction - projectnetTestCompare$projectnetTestPredictions)
+head(projectnetTestCompare)
+
+# Create a framework for the Plot of Neural Network errors.
+nnPlot <- data.frame(projectnetTestCompare$error,projecttesting$Age,projecttesting$Type.of.Travel)
+colnames(nnPlot) <- c("error","Age","Type.of.Travel")
+head(nnPlot)
+
+# Calculate the RMSE for the Neural Network
+RMSE.NN <- (sum((projectnetTestCompare$error)^2)/nrow(projecttesting))^0.5
+RMSE.NN
+
+# Creating aRules
+# structure and summary of satisSurvey2
+str(satisSurvey2)
+summary(satisSurvey2)
+
+# Calculate the mean age for our Airline's survey takers and store it in a variable called meanAge
+meanAge <- mean(satisSurvey2$Age)
+
+# Create the variable AgeFactor to test age against meanAge and determine if the survey taker is older than or younger than the meanAge.
+AgeFactor <- ifelse(satisSurvey$Age > meanAge,'older','younger')
+head(AgeFactor)
+
+# Add AgeFactor to satisSurvey2 dataframe, check the first few rows and structure of AgeFactor on satisSurvey2
+satisSurvey2 <- data.frame(satisSurvey2,AgeFactor)
+head(satisSurvey2$AgeFactor)
+str(satisSurvey2$AgeFactor)
+
+# Create a variable called meanFlights to find the average number of flights per year for a survey taker
+meanFlights <- mean(satisSurvey2$No.of.Flights.p.a.)
+
+# Create a variable called flightsPA that is a factor based on if the flights per year is more or less than the average 19.88 flights.
+flightsPA <- ifelse(satisSurvey2$No.of.Flights.p.a > meanFlights,'more than 20', 'less than 20')
+
+# Create a dataframe specifically for Arules where all data is a factor
+satisSurveyArules <- data.frame(satisSurvey2$Satisfaction,satisSurvey2$Airline.Status,satisSurvey2$AgeFactor,satisSurvey2$Gender,satisSurvey2$Price.Sensitivity,flightsPA,satisSurvey2$Type.of.Travel,satisSurvey2$Class,satisSurvey2$Arrival.Delay.greater.5.Mins)
+satisSurveyArules$Price.Sensitivity <- as.factor(satisSurveyArules$satisSurvey2.Price.Sensitivity)
+satisSurveyArules <- satisSurveyArules[,-5]
+SatisfactionFactor <- ifelse(satisSurveyArules$satisSurvey2.Satisfaction > 7, 'Highly Satisfied',ifelse(satisSurveyArules$satisSurvey2.Satisfaction>5,'Moderately Satisfied',ifelse(satisSurveyArules$satisSurvey2.Satisfaction==5,'Neutral',ifelse(satisSurveyArules$satisSurvey2.Satisfaction>2, 'Moderately Dissatisfied','Highly Dissatisfied'))))
+head(SatisfactionFactor)
+satisSurveyArules <- data.frame(satisSurveyArules[,-1],SatisfactionFactor)
+str(satisSurveyArules)
+
+# Create the initial ruleset of Arules
+ruleset <- apriori(satisSurveyArules,parameter=list(support=.01,confidence=0.5))
+summary(ruleset)
+inspect(ruleset)			# tells us the rules, LHS, RHS, Support, Confidence, Lift
+plot(ruleset)
+
+# Narrow the rules to those with a lift greater than 3.5
+goodrules <- ruleset[quality(ruleset)$lift > 3.5]
+inspect(goodrules)
+plot(goodrules)
+
+# Narrow the rules further by lift greater than 3.5 and confidence of 95%
+betterrules <- goodrules[quality(goodrules)$confidence > .95]
+inspect(betterrules)
+plot(betterrules)
+
+# Create SVM model
+svmOutput <- ksvm(Satisfaction~.,data=projecttraining)
+svmOutput
+
+# Test ksvm model
+svmPred <- predict(svmOutput,projecttesting,type="votes")
+svmPred
+str(svmPred)
+compTable <- data.frame(projecttesting[,1],svmPred[,1])
+colnames(compTable) <- c("test","Pred")
+head(compTable)
+
+# Compute the root mean squared error (RMSE) for the SVM
+RMSE.svm <- sqrt(mean((compTable$test-compTable$Pred)^2)) # A smaller value indicates a better model.
+RMSE.svm
+
+# Run SVM, neural network and lm then the RMSE for each to find the lowest value to know which is the best model.
+compTable$error <- abs(compTable$test-compTable$Pred)
+head(compTable)
+svmPlot <- data.frame(compTable$error,projecttesting$Age,projecttesting$Type.of.Travel)
+colnames(svmPlot) <- c("error","Age","Type.of.Travel")
+head(svmPlot)
+
+# Create a dataframe to compare RMSEs to find our best model
+RMSE <- data.frame(RMSE.lm,RMSE.svm,RMSE.NN)
+RMSE
+
+# Plot SVM error as a function of Age and Type of Travel.
+Plotsvm <-  ggplot(svmPlot,aes(x=Age, y=error)) + geom_point(aes(color=Type.of.Travel)) + ggtitle("SVM Prediction Error as a function of Age")
+Plotsvm
+
+# Plot Neural Net error as a function of Age and Type of Travel.
+Plotnn <-  ggplot(nnPlot,aes(x=Age, y=error)) + geom_point(aes(color=Type.of.Travel)) + ggtitle("Neural Network Prediction Error as a function of Age")
+Plotnn
+
+# Plot LM error as a function of Age and Type of Travel.
+Plotlm <-  ggplot(lmPlot,aes(x=Age, y=error)) + geom_point(aes(color=Type.of.Travel)) + ggtitle("Linear Model Prediction Error as a function of Age")
+Plotlm
+
+str(satisSurveyArules$SatisfactionFactor)
+
+
+
+
