@@ -1,0 +1,742 @@
+/*
+Author: Patricia Mills
+Title: Girl Scout Troop Sample Database
+Created: July, 2019
+*/
+
+-- drop all database objects in reverse order of their dependencies
+-- including views, stored procedures and tables; note the use of
+-- OBJECT_ID to detect if the object exists and conditionally deletes
+-- existing objects only. The 2nd parameter to OBJECT_ID is the object
+-- type - P for procedure, V for view, U for table
+-- drop all tables in reverse order of their dependencies
+
+IF OBJECT_ID('dbo.gssjctrainingIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.gssjctrainingIDLookup;
+go
+
+IF OBJECT_ID('dbo.skillIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.skillIDLookup;
+go
+
+IF OBJECT_ID('dbo.badgeIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.badgeIDLookup;
+go
+
+IF OBJECT_ID('dbo.troopmemberIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.troopmemberIDLookup;
+go
+
+IF OBJECT_ID('dbo.budgetIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.budgetIDLookup;
+go
+
+IF OBJECT_ID('dbo.scoutrankIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.scoutrankIDLookup;
+go
+
+IF OBJECT_ID('dbo.volunteerIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.volunteerIDLookup;
+go
+
+IF OBJECT_ID('dbo.gseventIDLookup') IS NOT NULL
+		DROP FUNCTION dbo.gseventIDLookup;
+go
+
+
+IF OBJECT_ID('dbo.gssjc_training', 'U') IS NOT NULL
+		DROP TABLE dbo.gssjc_training;
+go
+
+IF OBJECT_ID('dbo.volunteer_event_list', 'U') IS NOT NULL
+		DROP TABLE dbo.volunteer_event_list;
+go
+
+IF OBJECT_ID('dbo.troopmember_badge_list','U') IS NOT NULL
+		DROP TABLE dbo.troopmember_badge_list;
+go
+
+IF OBJECT_ID('dbo.troopmember_volunteer_list', 'U') IS NOT NULL
+		DROP TABLE dbo.troopmember_volunteer_list;
+go
+
+IF OBJECT_ID('dbo.troopmember_event_list', 'U') IS NOT NULL
+		DROP TABLE dbo.troopmember_event_list;
+go
+
+IF OBJECT_ID('dbo.badge_event_list', 'U') IS NOT NULL
+		DROP TABLE dbo.badge_event_list;
+go
+
+IF OBJECT_ID('dbo.skill', 'U') IS NOT NULL
+		DROP TABLE dbo.skill;
+go
+
+IF OBJECT_ID('dbo.badge', 'U') IS NOT NULL
+		DROP TABLE dbo.badge;
+go
+
+IF OBJECT_ID('dbo.troopmember', 'U') IS NOT NULL
+		DROP TABLE dbo.troopmember;
+go
+
+IF OBJECT_ID('dbo.budget', 'U') IS NOT NULL
+		DROP TABLE dbo.budget;
+go
+
+IF OBJECT_ID('dbo.adult_volunteer', 'U') IS NOT NULL
+		DROP TABLE dbo.adult_volunteer;
+go
+
+IF OBJECT_ID('dbo.scouting_rank', 'U') IS NOT NULL
+		DROP TABLE dbo.scouting_rank;
+go
+
+IF OBJECT_ID('dbo.gsevent', 'U') IS NOT NULL
+		DROP TABLE dbo.gsevent;
+go
+
+-- Creating gsevent table
+CREATE TABLE gsevent(
+	-- Columns for the gsevent table
+	gsevent_id int identity,
+	description varchar(300) NOT NULL,
+	budgeted_cost money NOT NULL,
+	actual_cost money,
+	activity_type varchar(20) NOT NULL,
+	event_date datetime NOT NULL,
+	-- Constraints on the gsevent table
+	CONSTRAINT PK_gsevent PRIMARY KEY (gsevent_id)
+)
+-- End creating gsevent table
+
+-- Creating scouting_rank table
+CREATE TABLE scouting_rank(
+	-- Columns for the scouting_rank table
+	scouting_rank_id int identity,
+	scouting_rank varchar(10),
+	-- Constraints on the scouting_rank table
+	CONSTRAINT PK_scouting_rank PRIMARY KEY (scouting_rank_id),
+	CONSTRAINT U1_scouting_rank UNIQUE(scouting_rank)
+)
+-- End creating scouting_rank table
+	
+-- Creating adult_volunteer table
+CREATE TABLE adult_volunteer(
+	-- Columns for the adult_volunteer table
+	volunteer_id int identity,
+	first_name varchar(20) NOT NULL,
+	last_name varchar(20) NOT NULL,
+	email_address varchar(60) NOT NULL,
+	phone_number varchar(10) NOT NULL,
+	background_check_expiration datetime NOT NULL,
+	-- Constraints on the adult_volunteer table
+	CONSTRAINT PK_adult_volunteer PRIMARY KEY (volunteer_id),
+	CONSTRAINT U1_adult_volunteer UNIQUE(email_address)
+)
+-- End creating adult_volunteer table
+
+-- Creating budget table
+CREATE TABLE budget(
+	-- Columns for the budget table
+	budget_id int identity,
+	payee varchar(100) NOT NULL,
+	date_spent datetime NOT NULL,
+	amount money NOT NULL,
+	gsevent_id int,
+	amount_remaining money,
+	-- Constraints on the budget table
+	CONSTRAINT PK_budget PRIMARY KEY (budget_id),
+	CONSTRAINT FK_budget FOREIGN KEY (gsevent_id) REFERENCES gsevent(gsevent_id)
+)
+-- End creating budget table
+
+-- Creating troopmember table
+CREATE TABLE troopmember(
+	-- Columns for the troopmember table
+	troopmember_id int identity,
+	first_name varchar(20) NOT NULL,
+	last_name varchar(20) NOT NULL,
+	email_address varchar(60) NOT NULL,
+	phone_number varchar(10) NOT NULL,
+	parent_first_name varchar(20) NOT NULL,
+	parent_last_name varchar(20) NOT NULL,
+	grade varchar(2) NOT NULL,
+	scouting_rank_id int NOT NULL,
+	birthday datetime,
+	-- Constraints on the troopmember table
+	CONSTRAINT PK_troopmember PRIMARY KEY (troopmember_id),
+	CONSTRAINT U1_troopmember UNIQUE (first_name, last_name),
+	CONSTRAINT FK_troopmember FOREIGN KEY (scouting_rank_id) REFERENCES scouting_rank(scouting_rank_id)
+)
+-- End creating troopmember table
+
+-- Creating badge table
+CREATE TABLE badge(
+	-- Columns for the badge table
+	badge_id int identity,
+	badge_name varchar(20) NOT NULL,
+	description varchar(100) NOT NULL,
+	scouting_rank_id int NOT NULL,
+	price_per_badge money NOT NULL,
+	quantity_on_hand int,
+	award_type varchar(10),
+	budget_id int,
+	-- Constraints on the badge table
+	CONSTRAINT PK_badge PRIMARY KEY (badge_id),
+	CONSTRAINT FK1_badge FOREIGN KEY (budget_id) REFERENCES budget(budget_id),
+	CONSTRAINT FK2_badge FOREIGN KEY (scouting_rank_id) REFERENCES scouting_rank(scouting_rank_id)
+)
+-- End creating badge table
+
+-- Creating skill table
+CREATE TABLE skill(
+	-- Columns for the skill table
+	skill_id int identity,
+	skill_description varchar(100) NOT NULL,
+	volunteer_id int NOT NULL,
+	-- Constraints on the skill table
+	CONSTRAINT PK_skill PRIMARY KEY (skill_id),
+	CONSTRAINT FK1_skill FOREIGN KEY (volunteer_id) REFERENCES adult_volunteer(volunteer_id)
+)
+-- End creating skill table
+
+-- Creating badge_event_list table
+CREATE TABLE badge_event_list(
+	-- Columns for the badge_event_list table
+	badge_event_list_id int identity,
+	badge_id int,
+	gsevent_id int,
+	-- Constraints on the badge_event_list table
+	CONSTRAINT PK_badge_event_list PRIMARY KEY (badge_event_list_id),
+	CONSTRAINT FK1_badge_event_list FOREIGN KEY (badge_id) REFERENCES badge(badge_id),
+	CONSTRAINT FK2_badge_event_list FOREIGN KEY (gsevent_id) REFERENCES gsevent(gsevent_id),
+	CONSTRAINT U1_badge_event_list UNIQUE (badge_id, gsevent_id) 
+)
+-- End creating badge_event_list table
+
+-- Creating troopmember_event_list table
+CREATE TABLE troopmember_event_list(
+	-- Columns for the troopmember_event_list table
+	troopmember_event_list_id int identity,
+	troopmember_id int NOT NULL,
+	gsevent_id int NOT NULL,
+	-- Constraints on the troopmember_event_list table
+	CONSTRAINT PK_troopmember_event_list PRIMARY KEY (troopmember_event_list_id),
+	CONSTRAINT FK1_troopmember_event_list FOREIGN KEY (gsevent_id) REFERENCES gsevent(gsevent_id),
+	CONSTRAINT FK2_troopmember_event_list FOREIGN KEY (troopmember_id) REFERENCES troopmember(troopmember_id),
+	CONSTRAINT U1_troopmember_event_list UNIQUE (troopmember_id, gsevent_id)
+)
+-- End creating troopmember_event_list table
+
+-- Creating troopmember_volunteer_list table
+CREATE TABLE troopmember_volunteer_list(
+	-- Columns for the troopmember_volunteer_list table
+	troopmember_volunteer_list_id int identity,
+	troopmember_id int NOT NULL,
+	volunteer_id int NOT NULL,
+	-- Constraints on the troopmember_volunteer_list table
+	CONSTRAINT PK_troopmember_volunteer_list PRIMARY KEY (troopmember_volunteer_list_id),
+	CONSTRAINT FK1_troopmember_volunteer_list FOREIGN KEY (troopmember_id) REFERENCES troopmember(troopmember_id),
+	CONSTRAINT FK2_troopmember_volunteer_list FOREIGN KEY (volunteer_id) REFERENCES adult_volunteer(volunteer_id),
+	CONSTRAINT U1_troopmember_volunteer_list UNIQUE (troopmember_id, volunteer_id)
+)
+-- End creating troopmember_volunteer_list table
+
+-- Creating troopmember_badge_list table
+CREATE TABLE troopmember_badge_list(
+	-- Columns for the troopmember_badge_list table
+	troopmember_badge_list_id int identity,
+	troopmember_id int NOT NULL,
+	badge_id int NOT NULL,
+	date_earned datetime
+	-- Constraints on the troopmember_badge_list table
+	CONSTRAINT PK_troopmember_badge_list PRIMARY KEY (troopmember_badge_list_id),
+	CONSTRAINT FK1_troopmember_badge_list FOREIGN KEY (troopmember_id) REFERENCES troopmember(troopmember_id),
+	CONSTRAINT FK2_troopmember_badge_list FOREIGN KEY (badge_id) REFERENCES badge(badge_id),
+	CONSTRAINT U1_troopmember_badge_list UNIQUE (badge_id, troopmember_id)
+)
+-- End creating troopmember_badge_list table
+
+-- Creating volunteer_event_list table
+CREATE TABLE volunteer_event_list(
+	-- Columns for the volunteer_event_list table
+	volunteer_event_id int identity,
+	volunteer_id int NOT NULL,
+	gsevent_id int NOT NULL,
+	-- Constraints on the volunteer_event_list table
+	CONSTRAINT PK_volunteer_event_list PRIMARY KEY (volunteer_event_id),
+	CONSTRAINT FK1_volunteer_event_list FOREIGN KEY (volunteer_id) REFERENCES adult_volunteer(volunteer_id),
+	CONSTRAINT FK2_volunteer_event_list FOREIGN KEY (gsevent_id) REFERENCES gsevent(gsevent_id),
+	CONSTRAINT U1_volunteer_event_list UNIQUE (volunteer_id, gsevent_id)
+)
+-- End creating volunteer_event_list table
+
+-- Creating gssjc_training table
+CREATE TABLE gssjc_training(
+	-- Columns for the gssjc_training table
+	training_id int identity,
+	training_name varchar(20) NOT NULL,
+	description varchar(100),
+	skill_id int,
+	volunteer_id int NOT NULL,
+	training_type varchar(20),
+	-- Constraints on the gssjc_training table
+	CONSTRAINT PK_gssjc_training PRIMARY KEY (training_id),
+	CONSTRAINT FK1_gssjc_training FOREIGN KEY (skill_id) REFERENCES skill(skill_id),
+	CONSTRAINT FK2_gssjc_training FOREIGN KEY (volunteer_id) REFERENCES adult_volunteer(volunteer_id)
+)
+-- End creating gssjc_training
+
+/*
+	Altar budget table to change the date_spent data type to date instead of datetime
+*/
+
+ALTER TABLE budget ALTER COLUMN date_spent date;
+GO
+
+/*
+	Create a function to retrieve an event_id for a given event.
+*/
+CREATE FUNCTION dbo.gseventIDLookup(@gsevent varchar(300))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	
+	-- Assign the correct gsevent_id to @returnValue
+	SELECT @returnValue = gsevent_id FROM gsevent
+	WHERE description = @gsevent
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve a volunteer_id for a given volunteer.
+*/
+CREATE FUNCTION dbo.volunteerIDLookup(@first varchar(20),@last varchar(20))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	-- Assign the correct volunteer_id to @returnValue
+	SELECT @returnValue = volunteer_id FROM adult_volunteer
+	WHERE first_name = @first AND last_name = @last
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve a scouting_rank_id for a given rank.
+*/
+CREATE FUNCTION dbo.scoutrankIDLookup(@scoutrank varchar(10))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	
+	-- Assign the correct scouting_rank_id to @returnValue
+	SELECT @returnValue = scouting_rank_id FROM scouting_rank
+	WHERE scouting_rank = @scoutrank
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve a budget_id for a given amount on a given date.
+*/
+CREATE FUNCTION dbo.budgetIDLookup(@date date,@amount money)
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	-- Assign the correct budget_id to @returnValue
+	SELECT @returnValue = budget_id FROM budget
+	WHERE date_spent = @date AND amount = @amount
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve a troopmember_id for a given troopmember.
+*/
+CREATE FUNCTION dbo.troopmemberIDLookup(@first varchar(20),@last varchar(20))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	-- Assign the correct troopmember_id to @returnValue
+	SELECT @returnValue = troopmember_id FROM troopmember
+	WHERE first_name = @first AND last_name = @last
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve an badge_id for a given badge.
+*/
+CREATE FUNCTION dbo.badgeIDLookup(@badge varchar(20))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	
+	-- Assign the correct badge_id to @returnValue
+	SELECT @returnValue = badge_id FROM badge
+	WHERE badge_name = @badge
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve an skill_id for a given skill.
+*/
+CREATE FUNCTION dbo.skillIDLookup(@skill varchar(100))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	
+	-- Assign the correct skill_id to @returnValue
+	SELECT @returnValue = skill_id FROM skill
+	WHERE skill_description = @skill
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a function to retrieve an gssjc_training_id for a given gssjc training.
+*/
+CREATE FUNCTION dbo.gssjctrainingIDLookup(@gssjc varchar(100))
+RETURNS int AS
+BEGIN
+	DECLARE @returnValue int
+	
+	-- Assign the correct training_id to @returnValue
+	SELECT @returnValue = training_id FROM gssjc_training
+	WHERE training_type = @gssjc
+	RETURN @returnValue
+END
+GO
+
+/*
+	Create a stored procedure to add a new badge to the database
+badge_name, description, scouting_rank_id,price_per_badge,quantity_on_hand,award_type
+	Inputs:
+		@badge : the name of the new badge
+		@description : a brief description of the badge (nullable)
+		@scoutrank : the scouting rank -- for use in a lookup function
+		@price : how much the badge costs at the scout shop
+		@quantity : how many badges we have in stock (nullable)
+		@award : type of award such as badge, pin, petal, journey, leaf
+		@scoutrankid : returned value of the lookupfunction
+	Returns:
+		SCOPE_IDENTITY() with the value inserted
+*/
+CREATE PROCEDURE AddBadge(@badge varchar(20), @description varchar(100)=NULL, @scoutrank varchar(20), @price MONEY, @quantity int, @award varchar(7)) AS
+BEGIN
+	DECLARE @scoutrankid int
+	SELECT @scoutrankid = dbo.scoutrankIDLookup(@scoutrank) 
+	INSERT INTO badge(badge_name, description, scouting_rank_id, price_per_badge, quantity_on_hand, award_type)
+		VALUES (@badge,@description,@scoutrankid,@price,@quantity,@award)
+	RETURN SCOPE_IDENTITY()
+END
+GO
+
+CREATE VIEW MostExpensiveEvent AS
+	SELECT TOP 1
+		*
+	FROM gsevent
+	ORDER BY budgeted_cost desc
+
+CREATE VIEW LeastExpensiveEvents AS
+	SELECT TOP 5
+		*
+	FROM gsevent
+	WHERE budgeted_cost > 0
+	ORDER BY budgeted_cost asc
+
+-- Function to count the badges earned by a given troopmember
+CREATE FUNCTION dbo.BadgeCount(@troopmemberID int)
+RETURNS int AS -- Count() is an integer value, so return it as an int
+BEGIN
+	DECLARE @returnValue int -- matches the function's return type
+
+	/*
+		Get the count of the badges for the provided troopmemberID and assign that
+		value to @returnValue. Note that we use the @troopmemberID parameter in the WHERE
+		clause to limit our count to that troopmember's badge records.
+	*/
+	SELECT @returnValue = COUNT(troopmember_id) FROM troopmember_badge_list
+	WHERE troopmember_badge_list.troopmember_id = @troopmemberID
+
+	-- Return @returnValue to the calling code.
+	RETURN @returnValue
+END
+GO
+
+CREATE VIEW LeastBadges AS
+	SELECT TOP 5
+		*,
+		dbo.BadgeCount(troopmember_id) AS BadgeCount
+	FROM troopmember
+	ORDER BY BadgeCount asc
+
+CREATE VIEW RemainingBudget AS
+SELECT TOP 1
+	budget_id,
+	Amount_remaining
+FROM budget
+ORDER BY budget_id desc
+
+CREATE VIEW CompareBudgetMostExpensiveEvent AS
+	SELECT TOP 1
+		budget_id,
+		Amount_remaining,
+		budgeted_cost
+	FROM budget
+	CROSS JOIN MostExpensiveEvent
+	ORDER BY budget_id desc
+  
+-- Inserting events into the gsevent table
+INSERT INTO gsevent(description,budgeted_cost,activity_type,event_date)
+	VALUES	 ('Meeting 1','0','Meeting','09/07/2019'),
+			 ('Meeting 2','0','Meeting','09/28/2019'),
+			 ('Bridging / Investiture / Rededication','150','Ceremony','10/12/2019'),
+			 ('Meeting 4','25','Meeting','10/26/2019'),
+			 ('Community Camp Out','200','Camping','11/02/2019'),
+			 ('Meeting 5','0','Meeting','11/23/2019'),
+			 ('Meeting 6','30','Meeting','12/14/2019'),
+			 ('Meeting 7','150','Meeting','12/28/2019')
+-- End inserting events into the event table
+
+-- Inserting the scouting_rank into the scouting_rank table
+INSERT INTO scouting_rank(scouting_rank)
+	VALUES	('Daisy'),
+			('Brownie'),
+			('Junior'),
+			('Cadette'),
+			('Senior'),
+			('Ambassador'),
+			('ALL')
+-- End inserting values into scouting_rank table
+
+-- Inserting volunteers into adult_volunteer table
+INSERT INTO adult_volunteer(first_name,last_name,email_address,phone_number,background_check_expiration)
+	VALUES					('Patricia','Miller','girlscouttroop142106@girlscouttroop.com','9022524022','05/01/2021'),
+							('Carolyn','Kennedy','carol_2116@girlscouttroop.com','8225027087','11/26/2021'),
+							('Jennie','Smith-Vasquez','smith.vasquez@girlscouttroop.com','2805055050','10/04/2021'),
+							('Sonia','Smith-Vasquez','soniamarie74@girlscouttroop.com','8226462595','10/04/2021'),
+							('Ijeoma','MUNACHIMSO','iejezie@girlscouttroop.com','2002577077','06/27/2022'),
+							('Miriam','Mountain','mmountain@girlscouttroop.com','8226926087','09/21/2021')
+--End inserting volunteers into the adult_volunteer table
+
+-- Inserting budget items into budget table
+INSERT INTO budget(payee, date_spent,amount,amount_remaining)
+	VALUES 	  ('Starting Budget','8/1/2019','1602.64','1602.64'),
+		  ('GSSJC Scout Shop','8/17/2019','-63.48',(SELECT SUM(1602.64-63.48)))
+--End inserting budget items into budget table
+
+-- Inserting troopmembers into troopmember table
+INSERT INTO troopmember
+		(first_name, last_name, email_address, phone_number, parent_first_name, parent_last_name, grade, scouting_rank_id, birthday)
+	VALUES	
+		('Abigail','Tosin','btonad@girlscouttroop.com','2076256764','Christiana','Tosin','2',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Brownie'),'01/05/2012'),
+		('Andrea','Kennedy','carol_2116@girlscouttroop.com','8225027087','Carolyn','Kennedy','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'12/12/2012'),
+		('Anusiem','MUNACHIMSO','iejezie@girlscouttroop.com','2002577077','Ijeoma','MUNACHIMSO','K',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'08/24/2013'),
+		('Nadia','Orlando','dameria.boston@girlscouttroop.com','8222200896','Dee','Orlando','K',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'11/14/2013'),
+		('Storie','Smith-Vasquez','smith.vasquez@girlscouttroop.com','2805055050','Jennie','Smith-Vasquez','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'05/10/2013'),
+		('Adella','MacKenzie','heather.MacKenzie.09@girlscouttroop.com','2467776702','Heather','MacKenzie','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'01/30/2013'),
+		('Bailey','Miller','pattymiller@girlscouttroop.com','9022524022','Patty','Miller','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'04/13/2013'),
+		('Nour','Mountain','mmountain@girlscouttroop.com','8226926087','Miriam','Mountain','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'04/04/2013'),
+		('Mya','Jones','jasmot101@girlscouttroop.com','9272040206','Jasmine','Jones','2',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Brownie'),'09/16/2011'),
+		('Sophia','Tooth','atanguma2@girlscouttroop.com','9408676225','April','Tooth','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'11/14/2012'),
+		('Brianna','March','bjulian07@girlscouttroop.com','2549202002','Brittney','March','2',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Brownie'),'01/28/2012'),
+		('Harper','Jang','ejingirly@girlscouttroop.com','8227265742','Helena','Jrykila','1',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Daisy'),'05/22/2013'),
+		('ZuRee','Burr','nae.hamilton@girlscouttroop.com','8224246202','Nae','Burr','2',(SELECT scouting_rank_id  FROM scouting_rank WHERE scouting_rank = 'Brownie'),'01/04/2012'),
+		('Katya','Skipper','andrea_skipper@girlscouttroop.com','8077048286','Andrea','Skipper','1',(SELECT scouting_rank_id FROM scouting_rank WHERE scouting_rank = 'Daisy'),'5/24/2013')
+-- End inserting values into troopmember table
+
+-- Inserting badges into badge table
+INSERT INTO badge(badge_name, description, scouting_rank_id,price_per_badge,quantity_on_hand,award_type)
+	VALUES	 ('Promise Center','Learn the Girl Scout Promise',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','6','Petal'),
+			 ('Lupe','Learning the Honest and Fair part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','7','Petal'),
+			 ('TIL Programmer','Learn about programmers and algorithms',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'3','10','Journey'),
+			 ('Count it Up','Learning about the types of cookies, their cost, setting a sales goal',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'3','2','Leaf'),
+			 ('Tula','Learning the Courageous and strong part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','6','Petal'),
+			 ('Sunny','Learning the Friendly and helpful part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','5','Petal'),
+			 ('Money Counts','Understand the different kinds of coins, paper money, finding the cost of fun',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'3','6','Leaf'),
+			 ('Zinni','Learning the Considerate and caring part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','5','Petal'),
+			 ('Mari','Learning the Responsible for what I say and do part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','6','Petal'),
+			 ('Gloria','Learning the Respect for myself and others part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','8','Petal'),
+			 ('Gerri','Learning the Respect authority part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.77','8','Petal'),
+			 ('Clover','Learning the Use resources wisely part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.78','13','Petal'),
+			 ('Rosie','Learning the Make the world a better place part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.78','13','Petal'),
+			 ('Vi','Learning the Be a sister to every Girl Scout part of the Girl Scout Law',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'0.78','13','Petal'),
+			 ('TAP Programmer','Service project that will continue after them related to their programmer journey',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'3','0','Journey'),
+			 ('Making Choices','Find difference between wants/needs, setting savings goal for want, help others with needs/wants',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'3','0','Leaf'),
+			 ('Talk It Up','Decide how to use cookie money, talk about how to use cookie money to inspire customers',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'3','0','Leaf'),
+			 ('Daisy Safety Award','Earned by completing the requirements for the Safety Award for the Rank',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'4','0','Petal'),
+			 ('Journey Summit','Earned by completing 3 Journeys in a rank of Girl Scouts',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'ALL'),'4','0','Pin'),
+			 ('Membership stars','Earned by completing a year of Girl Scouts',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'ALL'),'1.75','8','Pin'),
+			 ('Daisy Disc (per 24)','Backer for membership stars',(SELECT (scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'2.5','1','Backer'),
+			 ('Rededication','Re-committing to the Troop',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'ALL'),'1.98','7','Fun Patch'),
+			 ('Investiture','Joining the Troop',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'ALL'),'1.75','2','Fun Patch'),
+			 ('Brownie Bridging','Earned when bridging up to the next rank',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Brownie'),'3','0','Badge'),
+			 ('Walkabout 2019','Earned by doing a Cookie Walkabout',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'ALL'),'0','3','Cookie'),
+			 ('2019 Cookie Pin','Participated in the cookie sale in 2019',(SELECT(scouting_rank_id) FROM scouting_rank WHERE scouting_rank.scouting_rank = 'Daisy'),'4','2','Pin')
+-- End inserting into badge table
+
+-- Inserting Adult Volunteer Skills into the skill table
+INSERT INTO skill(skill_description, volunteer_id)
+	VALUES
+		('Nursing',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Jennie' AND adult_volunteer.last_name = 'Smith-Vasquez')),
+		('Camping',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller')),
+		('Sewing',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller')),
+		('Coding',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller')),
+		('Art',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Sonia' AND adult_volunteer.last_name = 'Smith-Vasquez')),
+		('Conflict Resolution',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Sonia' AND adult_volunteer.last_name = 'Smith-Vasquez')),
+		('Planning',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Carolyn' AND adult_volunteer.last_name = 'Kennedy')),
+		('Finances',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Miriam' AND adult_volunteer.last_name = 'Mountain')),
+		('Organization',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Carolyn' AND adult_volunteer.last_name = 'Kennedy'))
+-- End inserting into skill table
+
+-- Insert badges and events into the badge_event_list table
+INSERT INTO badge_event_list(badge_id,gsevent_id)
+	VALUES	((SELECT(badge_id) FROM badge WHERE badge.badge_name = 'Vi'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+			((SELECT(badge_id) FROM badge WHERE badge.badge_name = 'Clover'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+			((SELECT(badge_id) FROM badge WHERE badge.badge_name = 'Rosie'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 2')),
+			((SELECT(badge_id) FROM badge WHERE badge.badge_name = 'Investiture'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Bridging / Investiture / Rededication')),
+			((SELECT(badge_id) FROM badge WHERE badge.badge_name = 'Rededication'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Bridging / Investiture / Rededication')),
+			((SELECT(badge_id) FROM badge WHERE badge.badge_name = 'Brownie Bridging'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Bridging / Investiture / Rededication'))
+-- End inserting into badge_event_list table
+
+-- Insert troopmembers and events into the troopmember_event_list table
+INSERT INTO troopmember_event_list (troopmember_id, gsevent_id)
+	VALUES  ((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Abigail' AND troopmember.last_name = 'Tosin'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Andrea' AND troopmember.last_name = 'Kennedy'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Storie' AND troopmember.last_name = 'Smith-Vasquez'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Adella' AND troopmember.last_name = 'MacKenzie'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Bailey' AND troopmember.last_name = 'Miller'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Nour' AND troopmember.last_name = 'Mountain'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Brianna' AND troopmember.last_name = 'March'),(SELECT(gsevent_id) FROM gsevent WHERE gsevent.description = 'Meeting 1'))
+-- End inserting into troopmember_event_list table
+
+-- Insert troopmembers and volunteers into the troopmember_volunteer_list table
+INSERT INTO troopmember_volunteer_list(troopmember_id,volunteer_id)
+	VALUES	((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Storie' AND troopmember.last_name = 'Smith-Vasquez'),(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Jennie' AND adult_volunteer.last_name = 'Smith-Vasquez')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Storie' AND troopmember.last_name = 'Smith-Vasquez'),(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Sonia' AND adult_volunteer.last_name = 'Smith-Vasquez')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Bailey' AND troopmember.last_name = 'Miller'),(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Nour' AND troopmember.last_name = 'Mountain'),(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Miriam' AND adult_volunteer.last_name = 'Mountain')),	
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Anusiem' AND troopmember.last_name = 'MUNACHIMSO'),(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Ijeoma' AND adult_volunteer.last_name = 'MUNACHIMSO')),
+		((SELECT(troopmember_id) FROM troopmember WHERE troopmember.first_name = 'Andrea' AND troopmember.last_name = 'Kennedy'),(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Carolyn' AND adult_volunteer.last_name = 'Kennedy'))	
+-- End inserting into troopmember_volunteer_list table
+
+-- Insert troopmembers and badges into the troopmember_badge_list table
+INSERT INTO troopmember_badge_list(troopmember_id, badge_id, date_earned)
+	VALUES 	((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Lupe')),'10/27/2018'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Count It Up')),'12/11/2018'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Tula')),'1/15/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Sunny')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Zinni')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Money Counts')),'4/13/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Mari')),'4/27/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Gloria')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Bailey','Miller')),(SELECT dbo.badgeIDLookup('Gerri')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Lupe')),'10/27/2018'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Count It Up')),'12/11/2018'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Tula')),'1/15/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Sunny')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Zinni')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Money Counts')),'4/13/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Mari')),'4/27/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Gloria')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Andrea','Kennedy')),(SELECT dbo.badgeIDLookup('Gerri')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Lupe')),'10/27/2018'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Count It Up')),'12/11/2018'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Tula')),'1/15/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Sunny')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Zinni')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Money Counts')),'4/13/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Mari')),'4/27/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Gloria')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Abigail','Tosin')),(SELECT dbo.badgeIDLookup('Gerri')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Lupe')),'10/27/2018'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Count It Up')),'12/11/2018'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Tula')),'1/15/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Sunny')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Zinni')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Money Counts')),'4/13/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Gloria')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Nour','Mountain')),(SELECT dbo.badgeIDLookup('Gerri')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Lupe')),'10/27/2018'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Count It Up')),'12/11/2018'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Tula')),'1/15/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Sunny')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Zinni')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Mari')),'4/27/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Gloria')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Storie','Smith-Vasquez')),(SELECT dbo.badgeIDLookup('Gerri')),'6/8/2019'),
+		((SELECT dbo.troopmemberIDLookup('Adella','MacKenzie')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Adella','MacKenzie')),(SELECT dbo.badgeIDLookup('Money Counts')),'4/13/2019'),
+		((SELECT dbo.troopmemberIDLookup('Adella','MacKenzie')),(SELECT dbo.badgeIDLookup('Mari')),'4/27/2019'),
+		((SELECT dbo.troopmemberIDLookup('Adella','MacKenzie')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Sophia','Tooth')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Sophia','Tooth')),(SELECT dbo.badgeIDLookup('Money Counts')),'4/13/2019'),
+		((SELECT dbo.troopmemberIDLookup('Sophia','Tooth')),(SELECT dbo.badgeIDLookup('Mari')),'4/27/2019'),
+		((SELECT dbo.troopmemberIDLookup('Sophia','Tooth')),(SELECT dbo.badgeIDLookup('TIL Programmer')),'5/25/2019'),
+		((SELECT dbo.troopmemberIDLookup('Brianna','March')),(SELECT dbo.badgeIDLookup('Promise Center')),'10/09/2018'),
+		((SELECT dbo.troopmemberIDLookup('Brianna','March')),(SELECT dbo.badgeIDLookup('Sunny')),'2/12/2019'),
+		((SELECT dbo.troopmemberIDLookup('Brianna','March')),(SELECT dbo.badgeIDLookup('Zinni')),'2/12/2019')
+-- End inserting into the troopmember_badge_list table.
+
+-- Inserting into volunteer_event_list table.
+INSERT INTO volunteer_event_list(volunteer_id,gsevent_id)
+	VALUES  ((SELECT dbo.volunteerIDLookup('Sonia','Smith-Vasquez')),(SELECT dbo.gseventIDLookup('Meeting 1'))),
+		((SELECT dbo.volunteerIDLookup('Patricia','Miller')),(SELECT dbo.gseventIDLookup('Meeting 1'))),
+		((SELECT dbo.volunteerIDLookup('Miriam','Mountain')),(SELECT dbo.gseventIDLookup('Meeting 1'))),
+		((SELECT dbo.volunteerIDLookup('Ijeoma','Munachimso')),(SELECT dbo.gseventIDLookup('Meeting 1'))),
+		((SELECT dbo.volunteerIDLookup('Carolyn','Kennedy')),(SELECT dbo.gseventIDLookup('Meeting 1'))),
+		((SELECT dbo.volunteerIDLookup('Sonia','Smith-Vasquez')),(SELECT dbo.gseventIDLookup('Meeting 2'))),
+		((SELECT dbo.volunteerIDLookup('Jennie','Smith-Vasquez')),(SELECT dbo.gseventIDLookup('Meeting 2'))),
+		((SELECT dbo.volunteerIDLookup('Patricia','Miller')),(SELECT dbo.gseventIDLookup('Meeting 2'))),
+		((SELECT dbo.volunteerIDLookup('Patricia','Miller')),(SELECT dbo.gseventIDLookup('Bridging / Investiture / Rededication'))),
+		((SELECT dbo.volunteerIDLookup('Ijeoma','Munachimso')),(SELECT dbo.gseventIDLookup('Bridging / Investiture / Rededication'))),
+		((SELECT dbo.volunteerIDLookup('Miriam','Mountain')),(SELECT dbo.gseventIDLookup('Bridging / Investiture / Rededication'))),
+		((SELECT dbo.volunteerIDLookup('Sonia','Smith-Vasquez')),(SELECT dbo.gseventIDLookup('Community Camp Out'))),
+		((SELECT dbo.volunteerIDLookup('Patricia','Miller')),(SELECT dbo.gseventIDLookup('Community Camp Out'))),
+		((SELECT dbo.volunteerIDLookup('Miriam','Mountain')),(SELECT dbo.gseventIDLookup('Community Camp Out'))),
+		((SELECT dbo.volunteerIDLookup('Ijeoma','Munachimso')),(SELECT dbo.gseventIDLookup('Community Camp Out'))),
+		((SELECT dbo.volunteerIDLookup('Carolyn','Kennedy')),(SELECT dbo.gseventIDLookup('Community Camp Out')))
+-- End inserting into the volunteer_event_list
+
+--Insert training name, description, volunteer_id, event_type into the gssjc_training table
+INSERT INTO gssjc_training(training_name,description,volunteer_id,training_type)
+	VALUES	('Summer 2018 Train In','Training for leaders including Rank and meeting training',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller'),'Meeting'),
+		('Troop Treasurer','Training for troop treasurers to ensure fiscal responsibility',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Miriam' AND adult_volunteer.last_name = 'Mountain'),'Financial'),
+		('Cookie Manager 2019','Training for troop cookie managers',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller'),'Cookie Sales'),
+		('Cookie Manager 2019','Training for troop cookie managers',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Carolyn' AND adult_volunteer.last_name = 'Kennedy'),'Cookie Sales'),
+		('First Aid','American Heart Association first aid training',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller'),'First Aid'),
+		('Camp Certification','How to take your troop camping the GSSJC way',(SELECT(volunteer_id) FROM adult_volunteer WHERE adult_volunteer.first_name = 'Patricia' AND adult_volunteer.last_name = 'Miller'),'Camping')
+-- End inserting into the gssjc_training
+
+-- Update grade level and scouting_rank_id in troopmember table for a girl who skipped a grade
+UPDATE troopmember
+SET grade = '2',scouting_rank_id = (SELECT scouting_rank_id FROM scouting_rank WHERE scouting_rank = 'Brownie')
+WHERE last_name = 'MacKenzie' AND first_name = 'Adella'
+-- End updating troopmember.
+
+-- Update gsevent table to change budgeted cost for an event
+UPDATE gsevent
+SET budgeted_cost = '350'
+WHERE description = 'Community Camp Out'
+-- End updating gsevent
+
+-- Delete troopmember who switched troops without any badges
+DELETE troopmember WHERE first_name = 'ZuRee' AND last_name = 'Burr'
+
+EXEC AddBadge 'Buddy Camper','Plan and pack for a camping trip, go camping','Daisy','3','0','Journey'
+EXEC AddBadge 'Outdoor Art Maker', 'See and hear the colors and sounds of nature, share your outdoor art', 'Daisy', '3', '0', 'Journey'  
