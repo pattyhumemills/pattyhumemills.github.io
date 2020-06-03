@@ -1,0 +1,439 @@
+---
+title: 'Hamilton: The Man was Non-Stop'
+author: "Patricia Mills"
+date: "April 26, 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+## ONCE: install.packages("wordcloud")
+library(wordcloud)
+## ONCE: install.packages("tm")
+library(tm)
+# NOT AVAILABLE FOR R v3.6.2 install.packages("Snowball")
+# NOT AVAILABLE FOR R v3.6.2 library(Snowball)
+# ONCE: install.packages("slam")
+library(slam)
+# ONCE install.packages("quanteda")
+library(quanteda)
+library(SnowballC)
+library(arules)
+# ONCE install.packages('proxy')
+library(proxy)
+# ONCE install.packages('cluster')
+library(cluster)
+# ONCE install.packages('stringi')
+library(stringi)
+# ONCE install.packages("Matrix")
+library(Matrix)
+# ONCE install.packages("tidytext")
+library(tidytext)
+# ONCE install.packages("plyr")
+library(plyr)
+library(ggplot2)
+# ONCE install.packages('factoextra')
+library(factoextra)
+# ONCE install.packages("mclust")
+library(mclust)
+library(dplyr)
+# ONCE install.packages("stringr")
+library(stringr)
+# ONCE install.packages("rpart")
+library(rpart)
+# ONCE install.packages("rattle")
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+# ONCE install.packages("Cairo")
+library(Cairo)
+```
+
+# Introduction
+
+Once upon a time, Alexander Hamilton and James Madison were friends. Together, they helped defend the Constitution and, with the help of John Jay, left behind a series of papers that show later generations what the intentions of the writers of the Constitution were. Once. Within a few short years, Hamilton and Madison became enemies over such issues as the national debt and slavery. But for one shining period of time from 1787 to 1788, they wrote together and separately the majority of what are now known as "The Federalist Papers". 
+
+From the date of their publication to 1792, the names of the authors were unknown as they had been published under the pseudonym, "Publius", in order to ensure that neither Hamilton nor Madison were charged with breaking the confidentiality of the Constitutional Convention. In that year, a French publication announced the names of the collective of authors. When an American publisher in 1802 wanted to include the name of the author of each individual article, Hamilton rejected the notion. 
+
+It was not until 1810 that individual authorship was, in part, established. Hamilton had already died in his infamous dual with Aaron Burr, leaving behind a list of which articles he had written. By 1818, a new publication emerged that was based off the list of article Madison provided. The 1810 and 1818 publications form the basis of one of history's great mysteries. Who wrote the eleven disputed papers? Did Hamilton err in his list, written quickly as he prepared for his duel with Burr? Did he purposefully ascribe to himself what was written by another? Or does the fault lie with Madison? Divining either man's intent is impossible more than 200 years later. Through text analysis and clustering algorithms, however, it is possible to classify who the authors were.
+
+```{r fedpap, include = FALSE}
+FedPapersCorpus <- Corpus(DirSource("C://Users//patty//OneDrive//IST707 Spring 2020//Week 4//FedPapersCorpus"))
+numberFedPapers <- length(FedPapersCorpus)
+summary(FedPapersCorpus)
+# meta(FedPapersCorpus[[1]]) 
+# received error that FedPapersCorpus cannot use meta because it only works on corpus
+class(FedPapersCorpus) # Receive SimpleCorpus Corpus as class types. Why won't meta work?
+```
+```{r fedpapcleaning, inlcude = FALSE}
+getTransformations()
+nFedPapersCorpus <- length(FedPapersCorpus)
+# Set threshold to discard rare words that occur less than 1% of the documents
+minTermFreq <- nFedPapersCorpus*0.0001
+# Set threshold to discard overly common words that occur more than 85% of the documents
+maxTermFreq <- nFedPapersCorpus*1
+MyStopwords <- c("will","one","two","may","less","well","might","withou","small","single","several","but","very"
+                ,"can","must","also","any","and","are","however","into","almost","can","for","add")
+STOPS <- stopwords('english')
+FedPap_DTM <- DocumentTermMatrix(FedPapersCorpus,control=list(stopwords = TRUE, wordLengths = c(3,15),removePunctuation = TRUE,removeNumbers = TRUE,tolower = TRUE, stemming = TRUE,stopwords = MyStopwords, bounds = list(global = c(minTermFreq,maxTermFreq)))) 
+```
+```{r fedpapinspect, include = FALSE}
+DTM <- as.matrix(FedPap_DTM)
+DTM[1:11,1:10]
+WordFreq <- colSums(as.matrix(FedPap_DTM))
+head(WordFreq)
+ord <- order(WordFreq)
+WordFreq[head(ord)]
+WordFreq[tail(ord)]
+Row_Sum_Per_doc <- rowSums((as.matrix(FedPap_DTM)))
+```
+
+```{r fedpapnormalized, include=FALSE}
+FedPap_M <- as.matrix(FedPap_DTM)
+FedPap_M_N1 <- apply(FedPap_M,1,function(i) round(i/sum(i),3))
+FedPap_Matrix_Norm <- t(FedPap_M_N1)
+FedPap_M[c(1:11),c(1000:1010)]
+```
+
+```{r fedpapdata, include=FALSE}
+FedPap_dtm_matrix <- as.matrix(FedPap_DTM)
+str(FedPap_dtm_matrix)
+FedPap_dtm_matrix[c(1:11),c(2:10)]
+FedPap_DF <- as.data.frame(as.matrix(FedPap_DTM))
+str(FedPap_DF)
+FedPap_DF$abolit
+nrow(FedPap_DF)
+```
+
+# Analysis and Models
+## About the Data
+
+Each of the 85 Federalist Papers were read into a corpus in their entirety. To create a document term matrix, several parameters were set up. The minimum frequency that a term should appear in the corpus was 0.0085 while the maximum frequency was set at 85. Additionally the English stopwords were skipped as were a personal list of stopwords: will, one, two, may, less, well, might, withou, small, single, several, but, very, can, must, also, any, and, are, however, into, almost, can, for, add. The corpus was also reduced to stems of words rather than complete terms for word families. Numbers and punctuation were also removed.
+
+Once the document term matrix was created, each column was summmed to create a variable with the total number of times that each word appears overall, rather than by individual paper. Next each row is summed to find the total number of words per document. Then each term was normed by term frequency -- term/sum(term). This resulted in a matrix of 85 rows by 4900 columns. The rows were each paper of the Federalist Papers and the columns were the term frequencies of 4900 terms.
+
+As the matrix was large and some terms had a very small frequency, it was important to get some sort of visual cue as to what words are more frequent for each author. For Madison and Hamilton, a word cloud was created, as well as one for the disputed papers. As Jay only wrote five of the papers before having to drop out of the project due to illness, a word cloud was not created for his papers. Additionally, he never claimed authorship of the disputed articles. Likewise, because there are three papers co-authored by Hamilton and Madison, these are included in neither's word cloud nor is there a combined authorship word cloud.
+
+```{r disputewc, include = TRUE, echo = TRUE}
+my.USApal <- colorRampPalette(c("#B22234","#3C3B6E"))(100)
+PubliusWC <- wordcloud(colnames(FedPap_dtm_matrix),FedPap_dtm_matrix[11,],col=my.USApal)
+```
+
+In the word cloud for the disputed papers, only Federalist Paper 63 is included. This paper include some description of the elections of Senators. The most frequently used terms include peopl, senat, repres, govern, and will.   
+
+```{r hamiltonwc, include = TRUE,echo=TRUE}
+my.USApal <- colorRampPalette(c("#3C3B6E","#B22234"))(100)
+# HamiltonWC <- wordcloud(colnames(FedPap_dtm_matrix),FedPap_dtm_matrix[12:62,],col=my.USApal) don't use as it is too much data and not enough clarity.
+HamiltonWC <- wordcloud(colnames(FedPap_dtm_matrix),FedPap_dtm_matrix[39,],col=my.USApal)
+```
+
+For the Hamilton word cloud, first all documents ascribed to Hamilton were included. When that proved to rate all words included as near equals, the word cloud was reduced to only the terms found in Federalist Paper Number 65. Continuing the Senatorial theme, this paper outlines the powers of the Senate. Will, court, impeach, and upon appear most freqently in this paper. Will is used 19 times each in Federalist Papers 63 and 65.
+
+```{r madisonwc, include = TRUE,echo=TRUE}
+my.USApal <- colorRampPalette(c("#3C3B6E","#B22234"))(100)
+# MadisonWC <- wordcloud(colnames(FedPap_dtm_matrix),FedPap_dtm_matrix[71:85,],col=my.USApal) Similar to Hamilton, there just isn't enough to really compare.
+MadisonWC <- wordcloud(colnames(FedPap_dtm_matrix),FedPap_dtm_matrix[85,],col=my.USApal)
+```
+
+As with Hamilton, using all of Madison's writings in the Federalist Papers yielded results in a word cloud that showed little difference in frequency among the words. While Madison, at least in undisputed and solo authorings, did not write about the Senate, Federalist Paper Number 58 is about the legislative branch of government and, thus, is a fair comparison to Hamilton's and the disputed word clouds. In Madison's word cloud, the most noticible word is will which was used by Madison 38 times in this paper. Also frequently used are repres, state, number, and constitut. Since Madison uses will more times than either of the other two papers, it is likely not a word upon which classification can be determined.
+
+```{r fedpapcleaning2, include = FALSE}
+# There remained 4900 words but most of the workds on the list of 72 from the csv provided did not remain due to stopwords and other methods of removal.
+getTransformations()
+FedPap2_DTM <- DocumentTermMatrix(FedPapersCorpus,control=list(stopwords = FALSE, wordLengths = c(1,15),removePunctuation = TRUE,removeNumbers = TRUE,tolower = TRUE, stemming = TRUE,stopwords = FALSE, bounds = list(global = c(minTermFreq,maxTermFreq))))
+DTM2 <- as.matrix(FedPap2_DTM)
+DTM2[1:11,1:10]
+WordFreq2 <- colSums(as.matrix(FedPap2_DTM))
+head(WordFreq2)
+ord2 <- order(WordFreq2)
+WordFreq2[head(ord2)]
+WordFreq2[tail(ord2)]
+Row_Sum_Per_doc2 <- rowSums((as.matrix(FedPap2_DTM)))
+FedPap2_M <- as.matrix(FedPap2_DTM)
+keepcols <- c("a","all","also","an",'and','any','are','as','at','be','been','but','by','can','do','down','even','every','for','from','had','has','have','her','his','if','in','into','is','it','its','may','more','must','my','no','not','now','of','on','one','only','or','our','shall','should','some','such','than','that','the','their','then','there','things','this','to','up','upon','was','were','what','when','which','who','will','with','would','your')
+FedPap2_MTemp <- data.frame(names = keepcols) %>% mutate(names = as.character(names))
+FedPap2_MTemp2 <- as.data.frame(FedPap2_M) %>% select(one_of(FedPap2_MTemp$names))
+FedPap2_M <- as.matrix(FedPap2_MTemp2)
+rm(FedPap2_MTemp)
+rm(FedPap2_MTemp2)
+FedPap2_M_N1 <- apply(FedPap2_M,1,function(i) round(i/sum(i),3))
+FedPap2_Matrix_Norm <- t(FedPap2_M_N1)
+FedPap2_M[c(1:11),c(60:64)]
+
+FedPap2_dtm_matrix <- as.matrix(FedPap2_M)
+str(FedPap2_dtm_matrix)
+FedPap2_dtm_matrix[c(1:11),c(2:10)]
+FedPap2_DF <- as.data.frame(as.matrix(FedPap2_DTM))
+str(FedPap2_DF)
+```
+
+As the three word clouds did not bring clarity, the focus changed from looking at all 4900 words produced through the initial cleaning process to only include seventy-two words. Most of these words, though not all, are typically included in stopwords in English. The common nature of these words might provide a key to the mystery that was not to be found in the less commonly used words. A new document term matrix was created from the full corpus. This time it only included: a, all, also, an, and, any, are, as, at, be, been, but, by, can, do, down, even, every, for, from, had, has, have, her, his, if, in, into, is, it, its, may, more, must, my, no, not, now, of, on, one, only, or, our, shall, should, some, such, than, that, the, their, then, there, things, this, to, up, upon, was, were, what, when, which, who, will, with, would, your. The new document term matrix was used to find Euclidean Distance, Manhattan Distance, and Cosine Similarity. Then it was normed in the same manor as the earlier normed matrix by term frequency -- term/sum(term).
+
+```{r fedpapdistance, include = TRUE}
+EuclidDistMatrix <- dist(FedPap2_dtm_matrix, method = "euclidean")
+ManhatDistMatrix <- dist(FedPap2_dtm_matrix, method = "manhattan")
+CosDistMatrix <- dist(FedPap2_dtm_matrix, method = "cosine")
+CosDistMatrix_norm <-dist(FedPap2_Matrix_Norm,method = "cosine")
+```
+## Model 1
+
+In Model 1, Hierarchical Agglomerative Clustering was used to create clusters using the ward.D2 method. The ward.D2 method is based on Joe Ward, Jr.'s work on minimum variance when clustering. With this method, the error of the sum of squares in used to determine each cluster. 
+
+Hierarchical Agglomerative Clustering allows for each observation to be in 1 or more groups. In this way, looking at the dendrogram produced resembles a family tree type structure. In the case of the Federalist Papers, there are two distinct initial groups that continue to break down into smaller and smaller groups until each document is its own separate branch. This means that there is not a pre-defined number of clusters beyond the one object equals one cluster.
+
+The question becomes which measurement of distance is the best to use of the ones generated: Euclidean, Manhattan, Cosine Similarity, or the normed Cosine Similarity. For model 1, Euclidean and both Cosine Similarities were run.
+
+```{r HACeuclidean,include = TRUE,echo=FALSE}
+FedPap_groups_Euclidean <- hclust(EuclidDistMatrix, method = "ward.D2")
+```
+
+```{r HACcosine,include=TRUE,echo=FALSE}
+FedPap_groups_Cosine <- hclust(CosDistMatrix,method="ward.D2")
+```
+
+```{r HACcosineNORM,include=TRUE,echo=FALSE}
+FedPap_groups_Cos_Norm <- hclust(CosDistMatrix_norm,method="ward.D2")
+```
+## Model 2
+
+Model 2 uses the more common clustering technique, K-Means. Where Hierarchical Agglomerative Clustering is, as the name implies, hierarchical and allowing for multiple clusters for one object, K-Means is partitional and allows for one and only one cluster per object. Also unlike Hierarchical Agglomerative Clustering, K-Means requires there to be a set number of clusters before it can run. 
+
+When looking at the different distance measurements in plotted form, the value of 0.0 is a straight diagonal line which matches the same document on both the x and y axes. The more red the point, the further apart two documents are. The darker blue the area, the closer they are. Lighter of either red or blue, or if it is entirely white, that is the midpoint of values and indicates that it is either slightly further, slightly closer, or neither close nor far.
+
+```{r kmeans1viz, include=TRUE,echo=TRUE}
+distance1 <- get_dist(FedPap2_Matrix_Norm,method="manhattan")
+fviz_dist(distance1,gradient=list(low = "#3C3B6E",mid = "#FFFFFF", high = "#B22234"))
+```
+
+With the above plot, Manhattan Distance was used. There is some evidence of clusters of similar documents. Likewise, there is some very clear dissimilarity. This plot indicates that there might be three clusters.
+
+```{r kmeans2viz, include=TRUE,echo=TRUE}
+distance2 <- get_dist(FedPap2_Matrix_Norm,method="euclidean")
+fviz_dist(distance2,gradient=list(low = "#3C3B6E",mid = "#FFFFFF", high = "#B22234"))
+```
+
+For Euclidean Distance, the difference in the maximum distance to 0.00 is much smaller than with Manhattan distance. It tends to muddle this plot to the point where it is easy to determing the very dissimilar documents as well as the diagonal, but the possible clusters are less clear than with Manhattan Distance. Based on this plot, it would appear that there are two clusters. 
+
+```{r kmeans3viz, include=TRUE,echo=TRUE}
+distance3 <- get_dist(FedPap2_Matrix_Norm,method="spearman")
+fviz_dist(distance3,gradient=list(low = "#3C3B6E",mid = "#FFFFFF", high = "#B22234"))
+```
+
+With the final plot, Spearman's method of finding similarity is used as cosine is not an option. The color range is the same as the distance plots previous in that blue is most similar and red is most dissimilar. As with the other two plots, the dissimilar are very clear. However, with this plot, it is easier to see the possibility of four clusters. 
+
+Based on these three plots, K-means was run three times with the different numbers of clusters indicated by the plots above, though all other portions of the algorithm remained the same. With each clustering, the maximum number of iterations is set to 50 and the number of random sets to be chosen is 100. All K-Means clustering algorithms were run using the term frequency normed matrix of the smaller, select group of words.
+
+```{r Kmeans2,include = TRUE,echo=FALSE}
+FedPap_Kmeans2 <- kmeans(FedPap2_Matrix_Norm, centers = 2, nstart = 100,iter.max = 50)
+```
+
+```{r kmeans3, include=TRUE, echo = FALSE}
+FedPap_Kmeans3 <- kmeans(FedPap2_Matrix_Norm, centers = 3, nstart = 100,iter.max = 50)
+```
+
+```{r kmeans4, include = TRUE, echo = FALSE}
+FedPap_Kmeans4 <- kmeans(FedPap2_Matrix_Norm, centers = 4, nstart = 100,iter.max = 50)
+```
+
+```{r kmeansDF, include= TRUE,echo=FALSE}
+FedPap_Clusters <- data.frame(rownames(FedPap2_DF),FedPap_Kmeans2$cluster,FedPap_Kmeans3$cluster,FedPap_Kmeans4$cluster)
+colnames(FedPap_Clusters) <- c("Document","Clusters2","Clusters3","Clusters4")
+FedPap_Clusters$Author <- gsub("_fed_","",FedPap_Clusters$Document)
+FedPap_Clusters$Author <- gsub(".txt","",FedPap_Clusters$Author)
+FedPap_Clusters$Author <- gsub("[[:digit:]]","",FedPap_Clusters$Author)
+```
+## Model 3
+
+To create the decision trees, first the FedPap2_Matrix_Norm was converted to a dataframe. A new column was added to include each author's name as well as to make the row names their own columns. This allowed the decision trees to train on the authors' names. By keeping the row names in a column, a comparison of all three models' results for each document will be far easier. Additionally, all five of John Jay's papers were removed as there is no dispute on who wrote them and he is not a suspected author of the eleven disputed papers.
+
+After creating this dataframe, it was broken apart into testing and training dataframes. By holding out 40% of the papers to use as a testing group, the trees created had a lower likelihood of overfitting. All eleven of the disputed papers were kept in the hold out group by setting the starting seed to 11. 
+
+The control used in the rpart algorithm is the complexity parameter, set to zero. This parameter ensures that a split is not attempted if it does not lower the lack of fit thus pruning the tree as it is built. The R-square for this decision tree is 80% for one split on the training data. With one split, the relative error due to pruning through the complexity parameter is reduced from 100% to 40%. The decision tree splits on whether the word "upon" has a term frequency of greater than or equal to 0.0015. If it does, the tree classifies the paper as Hamilton. If it does not, then the paper was written by Madison. For the training data set, the tree image produced shows that 73% of the documents in the training set were written by Hamilton and 27% were written by Madison. 
+
+```{r decisiontree1, include = TRUE, echo = FALSE}
+FedPap2DT_DF <- as.data.frame(as.matrix(FedPap2_Matrix_Norm))
+FedPap2DT_DF <- tibble::rownames_to_column(FedPap2DT_DF)
+FedPap2DT_DF$Author <- ""
+FedPap2DT_DF <- FedPap2DT_DF[,c(66,2:65,1)] 
+FedPap2DT_DF[1:11,1] <- "Disputed"
+FedPap2DT_DF[12:62,1] <- "Hamilton"
+FedPap2DT_DF[63:65,1] <- "Hamilton-Madison"
+FedPap2DT_DF[66:70,1] <- "Jay"
+FedPap2DT_DF[71:85,1] <- "Madison"
+colnames(FedPap2DT_DF)[66] <- "DocumentName"
+# Create a DF without Jay
+FedPap2DT_DF1 <- FedPap2DT_DF[-66:-70,]
+numDisputed = 11
+numTotalFedPap = nrow(FedPap2DT_DF1)
+trainRatio <- .60
+set.seed(11)
+sample <- sample.int(n=numTotalFedPap-numDisputed,size = floor(trainRatio*numTotalFedPap),replace = FALSE)
+newSample = sample + numDisputed
+train <- FedPap2DT_DF1[newSample,]
+test <- FedPap2DT_DF1[-newSample,]
+length(newSample)/nrow(FedPap2DT_DF1)
+train_tree1 <- rpart(Author ~., data = train[,-66], method = "class", control = rpart.control(cp=0))
+summary(train_tree1)
+predicted1 <- predict(train_tree1,test[,-66],type="class")
+rsq.rpart(train_tree1)
+plotcp(train_tree1)
+fancyRpartPlot(train_tree1,palettes = "RdBu",main = "Decision Tree Model 1")
+authorDT1 <- as.character(predicted1[1:11])
+```
+
+Due to the relative error of tree 1 showing 40% with one split, a second tree was created with the only changes being a minimum number of splits set to two and a maximum depth of five. For the second tree, with two splits, the R-square hovers near 90% and with three splits, it is closer to 98%. Unlike decision tree 1, the X Relative of R-square is much lower than the apparent R-square. Additionally, the X Relative Error grows with each split. For this dataset, the more splits, the more errors there are. With the initial tree, the only splits were Hamilton and Madison. With the second tree, there possibility now exists to classify items as Hamilton, Madison, or Hamilton-Madison as a cowritten group. For this tree, if the word "upon" has a term frequency of greater than or equal to 0.0015, it first is put into the Hamilton group, just like tree 1, however this time the setting requires there to be at least two splits. For the next split on the Hamilton side, if the word "her" has a term frequency of less than 0.0035, the tree classifies it as a work of Hamilton and if not it is Madison. On the Madison side, if "be" has a term frequency of less than 0.02, it is classified as Hamilton-Madison, otherwise it is classified as Madison. The overall result of this is that 71% are attributed to Hamilton, 25% to Madison, and 4% to Hamilton-Madison.
+
+```{r decisiontree2, include = TRUE, echo = FALSE}
+train_tree2 <- rpart(Author ~ ., data = train[,-66], method = "class",control = rpart.control(cp=0,minsplit = 2,maxdepth = 5))
+summary(train_tree2)
+predicted2 <- predict(train_tree2,test[,-66],type = "class")
+rsq.rpart(train_tree2)
+plotcp(train_tree2)
+fancyRpartPlot(train_tree2,palettes = "RdBu",main = "Decision Tree Model 2")
+testResults <- data.frame(test,predicted1,predicted2)
+testResults <- testResults[,c(1,66,67,68,2:65)]
+authorDT2 <- as.character(predicted2[1:11])
+```
+# Results
+
+## Hierarchical Agglomerative Clustering Using Euclidean Distance 
+```{r HACEuclideanplot, include = TRUE, echo = TRUE}
+plot(FedPap_groups_Euclidean,cex=0.5,font=22,hang=-1,main = "Federalist Papers HAC Cluster Dendrogram")
+rect.hclust(FedPap_groups_Euclidean,k=4)
+```
+
+With the Euclidean Distance HAC Dendrogram cut at four clusters, the first cluster shows that Hamilton either wrote or co-wrote four of the papers. Jay wrote an additional four. The ninth paper is disputed. 
+
+The second cluster is the largest and contains the majority of the disputed papers. Thirty-six of Hamilton's writings appear in this cluster. Three of Madison's writings are contained in this cluster. Also included in cluster 2 are two of the three co-authored papers and one of Jay's papers. 
+
+The third cluster contains only one paper: Federalist Paper number 83, written by Alexander Hamilton.
+
+Twelve of Madison's papers are included in cluster 4 as compared to only nine of Hamilton's. The final paper included in this group is of disputed authorship.
+
+## Hierarchical Agglomerative Clustering Using Cosine Similarity
+
+```{r HACcosineplot,include=TRUE,echo=TRUE}
+plot(FedPap_groups_Cosine, cex=0.5,font=22,hang=-1,main = "Federalist Papers HAC Cluster Dendrogram")
+rect.hclust(FedPap_groups_Cosine,k=4)
+```
+
+Cosine similarity, which measures not on distance between groups but closeness within clusters, found different results. Cluster 1 is entirely made up of John Jay's papers and it contains all of them. 
+
+Group 2 contains six of the disputed papers. All other papers in this group were either authored or co-authored by James Madison. 
+
+The third group holds three of the disputed papers. Alexander Hamilton wrote the remaining papers in this cluster.
+
+The two disputed papers in the fourth and final group appear alongside 27.45% of Hamilton's total solo writings and 26.67% of Madison's.
+
+## Hierarchical Agglomerative Clustering Using Cosine Similarity with Term Frequency Normed Data
+
+```{r HACcosineplotNORM,include=TRUE,echo=TRUE}
+plot(FedPap_groups_Cos_Norm, cex=0.5,font=22,hang=-1,main = "Federalist Papers HAC Cluster Dendrogram")
+rect.hclust(FedPap_groups_Cos_Norm,k=4)
+```
+The term frequency normed cosine similarity clustera using Hierarchical Agglomerative Clustering is similar to the previous cosine similarity clusters but there are differences. Again the first group is entirely made up of Jay's writings. This time, all of cluster 4 are Hamilton's writings, though all of his writings do not appear in this cluster. Nine of the eleven disputed papers appear with eleven of Madison's fourteen writings and all three of the co-authored writings in cluster 2. The final two disputed papers are grouped with 33.33% of Hamilton's papers and 26.67% of Madison's papers. 
+
+## K-Means Clustering with Two Clusters
+
+```{r kmeanscluster2viz, include=TRUE, echo=TRUE}
+fviz_cluster(FedPap_Kmeans2,data=FedPap2_Matrix_Norm,main = "Federalist Papers 2 K-Means Clusters", outlier.color = "black",ggtheme = theme_void(),palette =colorRampPalette(c("#3C3B6E","#B22234"))(2))
+```
+
+When K-Means Clustering is used with only two clusters, there is a cluster that contains only John Jay's papers and a cluster that contain all of Hamilton's, Madison's, Hamilton and Madison's, and the disputed papers. Within the second cluster, the papers co-written by Hamilton and Madison are found furthest from the central part of the cluster.
+
+## K-Means Clustering with Three Clusters
+
+```{r kmeanscluster3viz, include=TRUE, echo=TRUE}
+fviz_cluster(FedPap_Kmeans3,data=FedPap2_Matrix_Norm,main = "Federalist Papers 3 K-Means Clusters", outlier.color = "black",ggtheme = theme_void(),palette =colorRampPalette(c("#3C3B6E","#B22234"))(3))
+```
+
+As with the two cluster plot, Jay is by himself. Likewise, the three co-written papers are distant from the main body of the remaining two clusters. Three clusters is not particularly effective at definitive clustering. One of the hallmarks of K-Means clustering is that the clusters are separate and distinct without overlapping. In the three cluster plot above, there is significant overlap between the first and third clusters.  
+
+## K-Means Clustering with Four Clusters
+
+```{r kmeanscluster4viz, include=TRUE, echo=TRUE}
+fviz_cluster(FedPap_Kmeans4,data=FedPap2_Matrix_Norm,main = "Federalist Papers 4 K-Means Clusters", outlier.color = "black",ggtheme = theme_void(),palette =colorRampPalette(c("#3C3B6E","#B22234"))(4))
+```
+
+The four cluster plot, like the three cluster plot, has significant overlap of the first 3 clusters. Jay's writings have consistently been their own cluster leading to the conclusion that no matter how many clusters there are, his should always be alone. Based on the amount of overlap and the number of papers within the same space, the K-Means plotting does little to help solve the mystery of who wrote the eleven disputed works. 
+
+```{r cluster1,include=TRUE,echo=FALSE}
+cluster1 <- FedPap_Clusters[FedPap_Clusters$Clusters4==1,c(1,4,5)]
+print(cluster1)
+```
+
+Cluster 1 contained six of Hamilton's papers, the three co-authored papers, and five of Madison's papers. All of John Jay's papers appeared in Cluster 4.
+
+```{r cluster2,include=TRUE,echo=FALSE}
+cluster2 <- FedPap_Clusters[FedPap_Clusters$Clusters4==2,c(1,4,5)]
+print(cluster2)
+```
+
+Seven of Madison's papers appeared in cluster 2 as opposed to twenty of Hamilton's. Given that Hamilton is the undisputed author of fifty-one of the Federalist Papers, only 39.22% of Hamilton's papers are in cluster 1 as opposed to 46.67% of Madison's.
+
+```{r cluster3,include=TRUE,echo=FALSE}
+cluster3 <- FedPap_Clusters[FedPap_Clusters$Clusters4==3,c(1,4,5)]
+print(cluster3)
+```
+
+In cluster 3 of the four cluster set, twenty-five of the thirty-two papers in the group belong to Hamilton. Three belong to Madison. Taking into consideration that Hamilton's number of undisputably authored papers, 49% of Hamilton's papers appear in this group.
+
+## Decision Trees
+```{r resultDecisionTree, include=TRUE,echo=FALSE}
+table(Authorship=predicted1,true=test$Author)
+table(Authorship = predicted2, true = test$Author)
+FedPap_MajorityRule_ALL <- sum(51/66)
+FedPap_MajorityRule <- sum(17/21)
+FedPap_AccuracyDT1 <- sum(20/21)
+FedPap_PrecisionHamDT1 <- sum(17/17)
+FedPap_PrecisionMadDT1 <- sum(3/3)
+FedPap_RecallHamDT1 <- sum(17/17)
+FedPap_RecallMadDT1 <- sum(3/4)
+FedPap_FMeasureHamDT1 <- (2*FedPap_PrecisionHamDT1*FedPap_RecallHamDT1)/(FedPap_PrecisionHamDT1 + FedPap_RecallHamDT1)
+FedPap_FMeasureMadDT1 <- (2*FedPap_PrecisionMadDT1*FedPap_RecallMadDT1)/(FedPap_PrecisionMadDT1 + FedPap_RecallMadDT1)
+FedPap_AccuracyDT2 <- sum(18/21)
+FedPap_PrecisionHamDT2 <- sum(14/17)
+FedPap_PrecisionMadDT2 <- sum(3/3)
+FedPap_RecallHamDT2 <- sum(14/14)
+FedPap_RecallMadDT2 <- sum(3/6)
+FedPap_FMeasureHamDT2 <- (2*FedPap_PrecisionHamDT2*FedPap_RecallHamDT2)/(FedPap_PrecisionHamDT2 + FedPap_RecallHamDT2)
+FedPap_FMeasureMadDT2 <- (2*FedPap_PrecisionMadDT2*FedPap_RecallMadDT2)/(FedPap_PrecisionMadDT2 + FedPap_RecallMadDT2)
+DecisionTree1 <- c(FedPap_AccuracyDT1,FedPap_PrecisionHamDT1,FedPap_PrecisionMadDT1,FedPap_RecallHamDT1,FedPap_RecallMadDT1,FedPap_FMeasureHamDT1,FedPap_FMeasureMadDT1)
+DecisionTree2 <- c(FedPap_AccuracyDT2,FedPap_PrecisionHamDT2,FedPap_PrecisionMadDT2,FedPap_RecallHamDT2,FedPap_RecallMadDT2,FedPap_FMeasureHamDT2,FedPap_FMeasureMadDT2)
+Metrics <- c("Accuracy","PrecisionH","PrecisionM","RecallH","RecallM","FMeasureH","FMeasureM")
+FedPap_DTMetrics <- data.frame(DecisionTree1,DecisionTree2)
+rownames(FedPap_DTMetrics) <- Metrics
+opar <- par(oma=c(0,0,0,6.5))
+barplot(cbind(FedPap_DTMetrics$DecisionTree1,FedPap_DTMetrics$DecisionTree2) ~ rownames(FedPap_DTMetrics),beside=TRUE,col=c("#3C3B6E","#B22234"),xlab="Metrics",main="Evaluation of Decision Tree 1 and Decision Tree 2",cex.names=.6)
+opar <-  par(oma = c(0,0,0,0), mar = c(0,0,0,0), new = TRUE)
+legend(x = "right", legend = colnames(FedPap_DTMetrics), fill = c("#3C3B6E","#B22234"), bty = "n", y.intersp = 2)
+```
+
+To compare the two decision trees, the overall accuracy was compared first followed by precision for Hamilton/ Madison, recall for Hamilton/Madision, and F-measure for Hamilton/Madison. As tree 1 did not have the option of Hamilton-Madison but tree 2 did, that metric was not used as a comparison point in and of itself. Because the second tree had Hamilton-Madison, the expectation was that this would be the more accurate tree. In fact, with an accuracy of 85.7% decsion tree 2 is less accurate than the 95.2% acheived by decision tree 1. Both trees had a 100% precision for Madison and 100% recall for Hamilton. The precision for Hamilton on tree 1, at 100%, is far superior to the tree 2's 82.4%. Recall for Madison on both tree 1 and tree 2 is the lowest metric for either tree, at 75% and 50% respectively. The F-measure for Hamilton on both trees is better than for Madison as a result. 
+
+As has been noted, Alexander Hamilton is the undisputed, solo author of 51 of the 85 Federalist Papers. This means the data is skewed, greatly, towards Hamilton meaning the measuring stick cannot be 50-50. Taking out the three papers jointly written by Hamilton and Madison, the eleven disputed papers, and the five written by John Jay, the majority rule would state that if the algorithm guessed Hamilton for all of the test data, 77.3% of the time it would be right. If the accuracy rating is not higher than 77.3%, the model is no good and has learned nothing. Both models are good as both have accuracies aboved the majority rule mark. Across all metrics, tree 1 either meets or exceeds the metrics for tree 2 therefore it is the better, more reliable model of the two.  
+
+# Conclusion
+
+When clustering, it is entirely possible to have different results between types and, with K-Means, each time they are run. With the results received, Hierarchical Agglomerative Clustering with Euclidean Distance has the most dissimilar results compared to Hierarchical Agglomerative Clustering with Cosine Similarity, Hierarchical Agglomerative Clustering with Cosine Similarity with term frequency normed data, and K-Means clustering with 4 clusters. The Hierarchical Agglomerative Clustering with Cosine Similarity with term frequency normed data is the next most different. Hierarchical Agglomerative Clustering with Cosine Similarity and K-Means clustering with 4 clusters were only in disagreement on one paper. Incidentally, when taking all four of these clustering models into account, it is the only one without a clear answer.
+
+The consensus of only the clustering models is that Hamilton wrote Federalist Papers 53, 55, 56, and 62. By the same standard, Madison wrote Federalist Papers 49, 50, 51, 52, 54, and 63. Federalist Paper 57 is the one whose authorship is still unclear as two models mark it as Hamilton's and two mark it as Madison. Alexander Hamilton's list contains one known error indicating that John Jay wrote Number 54 instead of 64. It is possible that in his haste to make the list ahead of his duel and ultimate death, Hamilton made a mistake on more of the list. James Madison, who was quick to criticize and ascribe the worst possible motives to Alexander Hamilton while he was alive, believed that it was just a mistake. James Madison, on the other hand, claimed some of the papers that these clustering results mark as Hamilton's. While he, too, could have made a mistake, his claims came long after Hamilton's death when the only other living author was John Jay. Jay could have, possibly, set the record straight. However, it does not appear that he did. 
+
+When considered as equals, the clustering models and the decision trees end up have four papers that are in a tie. However, they are not equal. In the supervised model of decision trees, the model can learn from the training dataset where the clustering models cannot. Given that is the case, and that the decision trees have no ties amongst them, they are the more reliable of the methods for this case.
+
+```{r disputedpapers,include=TRUE,echo=FALSE}
+disputedDocuments <- c("49","50","51","52","53","54","55","56","57","62","63")
+authorHACeuclid <- c("Hamilton","Hamilton","Hamilton","Hamilton","Hamilton","Hamilton","Hamilton","Hamilton","Hamilton","Hamilton","Madison")
+authorHACcosine <- c("Madison","Madison","Madison","Madison","Hamilton","Madison","Hamilton","Hamilton","Hamilton","Hamilton","Madison")
+authorHACcosineNorm <- c("Madison","Madison","Madison","Madison","Madison","Madison","Madison","Hamilton","Madison","Hamilton","Madison")
+authorKMeans4clusters <- c("Madison","Madison","Madison","Madison","Hamilton","Madison","Hamilton","Hamilton","Madison","Hamilton","Madison")
+authorshipDF <- data.frame(disputedDocuments,authorHACeuclid,authorHACcosine,authorHACcosineNorm,authorKMeans4clusters,authorDT1,authorDT2)
+authorshipDF$countHamilton <- rowSums(authorshipDF == "Hamilton")
+authorshipDF$countMadison <- rowSums(authorshipDF == "Madison")
+```
+
+When using decision trees, the depth of the tree can cause different results. The two trees created in Model 3, while different on some of the non-disputed papers, completely agreed who authored the disputed papers. If the clustering models are completely discounted, the author of papers 50 and 54 was Hamilton, with Madison writing papers 49, 51, 52, 53, 55, 56, 57, and 62.
+
+Regardless of authorship of, and reasons for, these eleven disputed papers, Hamilton was the driving force of the Federalist Papers. The original plan had only been to write twenty-five essays, Hamilton wrote fifty-one and co-wrote an additional three. As the hit musical, Hamilton, says, "the man was non-stop"! 
+
+
