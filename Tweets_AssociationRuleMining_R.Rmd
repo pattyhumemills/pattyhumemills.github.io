@@ -1,0 +1,197 @@
+---
+title: "Cheating, Baseball, and Tweeting"
+author: "Patricia Mills"
+date: "April 23, 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, results = 'show', include = TRUE, messages = FALSE)
+# Twitter Consumer API keys and Access Token & token secret
+consumerKey = '4aGk0x12LlFzImFtJfTH7TTlE'
+consumerSecret = "nhnEN2Mu3qPc3CllROAqLQVEcJ88gK0DCM7RrqOWbXYCJLNtgt"
+access_Token = '15634701-f88LIDkEe8id8SxK77iiyG0BsWfExJqXqzprt8yXZ'
+access_Secret = '4BwVKazzKn6R9BluX5zMPwOwk3yjDdSc5D1FThG4skxCv'
+```
+
+```{r api, include = FALSE}
+requestURL = 'https://api.twitter.com/oauth/request_token'
+accessURL = 'https://api.twitter.com/oauth/access_token'
+authURL = 'https://api.twitter.com/oauth/authorize'
+library(arules)
+library(arulesViz)
+library(rtweet)
+library(twitteR)
+library(ROAuth)
+library(jsonlite)
+library(streamR)
+library(rjson)
+library(tokenizers)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(syuzhet)
+library(stringr)
+library(stopwords)
+library(tidyr)
+library(tm)
+library(wordcloud)
+library(tidytext)
+```
+
+# Introduction
+
+In the off-season between the 2019 Major League Baseball season and the beginning of spring training for the 2020 season, the MLB completed its investigation into a cheating scandal that rocked the baseball world. The 2017 Houston Astros used electronic means to steal signs from other baseball teams in their march to the World Series, and their eventual title as World Series Champions. In the early days after the investigation wrapped up and punishment was handed down, players from other teams expressed their shock and anger in tweets while vowing revenge on the Astros players. In baseball terms, pitchers were planning to intentionally hit Astros players when they came up to bat. Fans of baseball tweeted that they were similarly, rightfully, angry. Some Astros fans went so far as to sue the Astros organization for tickets purchased in the 2017 season.
+
+In a normal year, by April 23rd baseball fans would have enjoyed over 300 games. And, most assuredly, the revenge tour would be in full swing. This year, there have been no games and very little spring training due to the novel coronavirus. In the first five games of spring training, Astros players were hit by pitches seven times, some of those to players who were not with the Astros in 2017. Spectators heckled the Astros. Anger was palpable in the stands throughout the nineteen games played of spring training. The Astros have laid fairly low since the abrupt ending to spring training. If the big-name players are mentioned, it is only about their work to help the Houston community grappling with the pandemic. 
+
+Meanwhile, the Commissioner's office was investigating another team for similar transgressions in 2018 -- the Boston Red Sox. There was a link between the 2017 Houston Astros and the 2018 Boston Red Sox. Alex Cora had been the Astros Bench Coach in 2017, and was purportedly one of the ring leaders of the sign stealing scheme. In 2018, he became the manager of the Red Sox. On April 22, 2020, Rob Manfred, MLB Commissioner, released his report on the Red Sox scandal. As with the Astros in the off-season, tweets flew fast and furious about the findings. Will these tweets rake the Red Sox over the coals the way the Astros were?
+
+```{r tweets, include = FALSE}
+setup_twitter_oauth(consumerKey,consumerSecret,access_Token,access_Secret)
+Search <- twitteR::searchTwitter(list("Red Sox","Red Sox","RedSox"),n=250,since="2020-04-22",until="2020-04-24",maxID='1253354470769135616')
+Search_DF <- twListToDF(Search)
+TransactionTweetsFile = "RedSoxTweets.csv"
+Search_DF$text[1]
+
+# Start the file
+Trans <- file(TransactionTweetsFile)
+
+# Tokenize to words
+Tokens <- tokenizers::tokenize_words(Search_DF$text[1],stopwords = stopwords::stopwords("en"),lowercase = TRUE,strip_punct = TRUE,strip_numeric = TRUE,simplify = TRUE)
+
+# Write squished tokens
+cat(unlist(str_squish(Tokens)),"\n",file=Trans,sep=",")
+close(Trans)
+
+# Append remaining lists of tokens into file
+# Recall - a list of tokens is the set of words from a Tweet
+Trans <- file(TransactionTweetsFile,open = "a")
+for(i in 2:nrow(Search_DF)){
+  Tokens <- tokenize_words(Search_DF$text[i],stopwords = c(stopwords::stopwords("en"),"wallpaperwednesday","presented"),lowercase = TRUE,strip_punct = TRUE,simplify = TRUE)
+  cat(unlist(str_squish(Tokens)),"\n",file = Trans,sep = ",")
+}
+close(Trans)
+```
+
+
+```{r baskets, include=FALSE}
+# Read in the tweet transactions
+TweetTrans <- read.transactions(TransactionTweetsFile,rm.duplicates = FALSE,format = "basket", sep = ",")
+
+arules::inspect(head(TweetTrans))
+
+# See the words that occur the most
+Sample_Trans <- sample(TweetTrans, 20)
+summary(Sample_Trans)
+
+# Read the transactions data into a dataframe
+TweetDF <- read.csv(TransactionTweetsFile,header=FALSE,sep = ",")
+head(TweetDF)
+str(TweetDF)
+```
+
+```{r clean, include = FALSE}
+TweetDF <- TweetDF %>%
+  mutate_all(as.character)
+str(TweetDF)
+
+# We can now remove certain words
+TweetDF[TweetDF == "t.co"] <- ""
+TweetDF[TweetDF == "rt"] <- ""
+TweetDF[TweetDF == "http"] <- ""
+TweetDF[TweetDF == "https"] <- ""
+# Convert all columns to char
+MyDF <- NULL
+for(i in 1:ncol(TweetDF)){
+  MyList = c() # each list is a column of logicals
+  MyList = c(MyList,grepl("[[:digit:]]", TweetDF[[i]]))
+  MyDF <- cbind(MyDF,MyList) # create a logical DF
+  # TRUE is when a cell has a word that contains digits
+}
+
+# For all TRUE, replace with blank
+TweetDF[MyDF] <- ""
+head(TweetDF,10)
+# Now we save the dataframe using the write table command
+write.table(TweetDF,file="UpdatedRedSoxTweets.csv",col.names = FALSE,row.names = FALSE, sep = ",")
+TweetTrans <- read.transactions("UpdatedRedSoxTweets.csv",sep = ",",format("basket"),rm.duplicates = TRUE)
+arules::inspect(head(TweetTrans))
+```
+# Analysis and Models
+## About the Data
+
+Tweets were collected looking for "Red Sox", "Red Sox", "RedSox", which resulted in 250 tweets collected. To cleanse the tweets, the following phrases were removed: t.co, rt, http, and https as well as all English stopwords. By creating a sparse matrix to count the number of times each word appears in the tweets, it allows for adding up how frequently the word appears. After creating a variable for the word frequencies, it was sorted based on the frequency. When looking at the words that occur most frequently in the tweets with the Red Sox, or some variation thereof, MLB appears 64 times. Cora was next at 54 times. Using the frequency list, wordCountRS, a word cloud was created to get a better idea of importance. Within the word cloud, other frequent words include: slap, wrist, alex, astros, and jonheyman.
+.
+```{r redsoxwordcloud, echo=TRUE}
+words.RedSox <- VectorSource(TweetDF)
+words.corpusRS <- Corpus(words.RedSox)
+words.corpusRS <- tm_map(words.corpusRS,content_transformer(tolower))
+words.corpusRS <- tm_map(words.corpusRS, removePunctuation)
+words.corpusRS <- tm_map(words.corpusRS, removeNumbers)
+words.corpusRS <- tm_map(words.corpusRS, removeWords,stopwords("english"))
+tdmRS <- TermDocumentMatrix(words.corpusRS)
+mRS <- as.matrix(tdmRS)
+wordCountsRS <- rowSums(mRS)
+wordCountsRS <- sort(wordCountsRS, decreasing=TRUE)
+head(wordCountsRS)
+cloudFrameRS <- data.frame(word=names(wordCountsRS),freq=wordCountsRS)
+redsoxcolors <-colorRampPalette(c("#052755","#C62033"))(100)
+#wordcloud(cloudFrameRS$word,cloudFrameRS$freq)
+wordcloud(names(wordCountsRS),wordCountsRS,min.freq=2,max.words=50, rot.per = 0.35, colors=redsoxcolors)
+```
+# Model 1
+
+While some terms from the Tweets may be apparent to a fan of the Red Sox, non-fans may question why they are appearing frequently together. Enter Association Rule Mining. Association rules dictate the which terms appear together and how often they do so as well as how much confidence there is that they will appear together. There are three measurements to be aware of. Support gives the percentage of the time that given terms appear together. Where investigation, postseason, and eliminated are terms and 250 is the number of tweets, support of the rule if investigatio and postseason appear together, eliminated also will be in the tweet is calculated by: Support({investigation, postseason} -> {eliminated}) = support_count({investigation, postseason, eliminated})/250. Confidence indicates how freqently the rule is true. Using this same example, confidence is calculated by:  Support({investigation, postseason, eliminated})/support_count({investigation, postseason}). The third and final measurement is lift. Lift is the measurement of correlation or dependence. Continuing the example with investigation, postseason, and eliminated, lift is calculated by: Lift (investigation, postseason => eliminated) = support({investigation, postseason, eliminated})/(support(investigation, postseason) * support(eliminated)). As lift measures correlation, higher numbers are preferred to lower ones. When creating the Association Rules algorithm, it is helpful to set bottom thresholds in order to prune out words that are infrequently tweeted. The bottom thresholds were set at 10% for support, 90% for confidence, and a minimum length of 3 words. This resulted in a list of 24158 rules. 
+
+```{r arm, include = FALSE, echo = TRUE}
+TweetTrans_rules = arules::apriori(TweetTrans,parameter = list(support = 0.10, confidence = .95, minlen = 3))
+arules::inspect(head(TweetTrans_rules))
+```
+
+# Results
+
+First, the rules were sorted by decreasing confidence. Of the top 20 rules generated, all have a 100% confidence. In the confidence sort, the top twenty rules have support between 10% and 10.4%, and lift varies between 1.32 and 9.64. 
+
+Multiple rules have some combination of considering, keep, and deserved. One such states that if considering and keep appear in the tweet, so will deserved. The support indicates that it occurs in 10.4% of the tweets and the correlation shows that it is highly correlated at 9.64 lift. Without the full tweet, it would indicated that people believe that the Red Sox punishment may be exactly what they deserved.
+
+```{r confidencearm, include=TRUE}
+# Sort those rules
+SortedRules_conf <- sort(TweetTrans_rules, by = "confidence", decreasing = TRUE)
+arules::inspect(head(SortedRules_conf,20))
+plot(SortedRules_conf,method = "graph", interactive = FALSE,shading = "lift",main = "Rules sorted by Confidence")
+```
+
+Upon discovering that all of the top twenty rules sorted for confidence are at 100% for that measure, the rules were sorted for decreasing support. The top twenty rules for support range from 13.3% to 18.1% with confidence ranging from 95.1% to 100% and lift between 1.25 and 6.92. What makes this sorting more interesting is that there are some left hand sides with three terms where the confidence sort only ever had two in the top twenty. However, there is still not very much variety as all top twenty rules contain one or more of the following terms: red, sox, slap, wrist. One such rule states that if red, slap, and wrist appear in a tweet so does sox. With a support of 14%, a confidence og 100% and a lift of 1.32, it appears to be a strong rule but one of the lower correlations in the rules. However, the similar rule of if red, sox, and slap are in a tweet, wrist will also appear has the same support but a confidence of only 97.4% and a lift of 6.92. The conclusion would be that there are some tweets that exist where red, sox, and slap all appear but wrist does not. There are apparently people who would like to slap the Red Sox!
+
+```{r supportarm, include = TRUE}
+SortedRules_sup <- sort(TweetTrans_rules, by = "support", decreasing = TRUE)
+arules::inspect(head(SortedRules_sup,20))
+plot(SortedRules_sup[1:50],method = "graph", interactive = FALSE,shading = "confidence",main = "50 Rules sorted by Support")
+```
+
+Because of the frequency that red, sox, slap, wrist in the highest support rules, the rules were again sorted by highest lift. Within the twenty rules with the highest lift, all rules had the same lift (9.64), support (10.4%), and confidence (100%). Indeed this manner of sorting mimicked the findings from the high confidence rules. Two notable exceptions involve Jon Heyman. Mr. Heyman is a sportswriter and former beatwriter for the New York Yankees, very likely he is also a Yankee fan. The first rule shows that if jonheyman and keep are in the tweet, so is deserved. The other rule is similar, if jonheyman and deserved are in the tweet, so is keep. Why? Are these retweets? Are they replies to Mr. Heyman? Based on other rules where keep, seeing, and deserved are dependent on each other, it is highly likely that the tweets referencing Mr. Heyman are questioning his judgment on the Red Sox. 
+
+```{r liftarm, include = TRUE}
+SortedRules_lift <- sort(TweetTrans_rules, by = "lift", decreasing = TRUE)
+arules::inspect(head(SortedRules_lift,20))
+plot(SortedRules_lift[1:50],method = "graph", interactive = FALSE,shading = "confidence",main = "50 Rules sorted by Lift")
+```
+
+```{r graph, include = TRUE}
+plot(TweetTrans_rules[1:50])
+plot(TweetTrans_rules[1:50], method="paracoord", control=list(reorder=TRUE))
+```
+
+# Conclusions
+
+Due to the conclusion of the Commissioner's investigation, tweets referencing the scandal are rampant. Additionally, while the Astros' scandal had not been the focus of the Twitter-sphere for weeks, the Red Sox ruling has just erupted. When looking at the sorted rules based on the measurements, one of the clearest takeaways is that the Red Sox either got what they deserved or that it was just a slap on the wrist. When taken in conjuction with the Astros punishment, it is extremely light. If anyone thinks they got the deserved punishment, it would likely be a Red Sox fan. The rest of the baseball world would appear to think the punishment was not enough. 
+
+The Red Sox can hope that before Opening Day finally arrives, other teams will have forgotten how they were cheated. However, if John Henry II, the owner of the Red Sox, wants to ensure that the fans, at least, are in a more forgiving mood by then, they should take advantage the postponed beginning of the season. The first suggestion would be to not mention the scandal again while the season is postponed. Most players, fans, and sportswriters have far more pressing concerns during the pandemic. While they will not forget, it will not be constantly brought up until the season resumes. Even then, if the Red Sox and their owner follow the other suggestions, they may actually find there is a little goodwill to trade on.
+
+Goodwill, how can the Red Sox generate that? The Astros have been a model of this lately. Alex Bregman, the Astros 3rd baseman since 2016, has routinely been seen helping to distribute food at drive through community meal offerings for low-income Houstonians. Justin Verlander, an Astros pitcher since mid-2017, is donating his paychecks to various organizations in and out of Houston, most recently Covenent House in New York. The Astros Foundation in conjunction with Crane Worldwide, owned by Jim Crane, is delivering personal protection equipment to the Texas Medical Center in Houston. There are several other similar examples within the Astros organization. This does not excuse their cheating but it does help to restore the team's former image of "The Good Guys". The Red Sox could take a page out of the Astros' crisis management playbook. 
+
+When the season does start back up, apologize. Have the players involved apologize -- and mean it. The Astros apologized at the beginning of spring training. No one bought it, not even loyal fans. The Red Sox players will need to be coached on how to sincerely apologize. Since none of their players admitted to their part in it, it is hard to pinpoint who should apologize amongst the players, therefore, they will all need to. However, the organization needs to make it clear that while Alex Cora was suspended for his behavior with the Astros, they have no intention of rehiring him after his suspension. If they continue to indicate that there is a possibility that he will be welcomed back, many will see that as no punishment at all, especially with how short this season is likely to be.
+
+The last suggestion involves monitoring social media. While the Red Sox organization likely is already doing so, continue that effort. Consistently appraising the level of good, or bad, will from outside of their market area will help them to know what they will face when next they play. It can also help to pinpoint efforts they could be making to raise the goodwill in places that it will be harder to do so: New York and Los Angeles. Both New York and Los Angeles blame the Red Sox for why their teams were not the World Series Champions in 2018. The games played in those cities will be rough -- unless the Red Sox can manage to turn their image around.
