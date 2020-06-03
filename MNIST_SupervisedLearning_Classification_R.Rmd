@@ -1,0 +1,403 @@
+---
+title: "Handwriting Digits"
+author: "Patricia Mills"
+date: "5/21/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# ONCE install.packages("sqldf")
+# ONCE install.packages("class")
+# ONCE install.packages("e1071")
+# ONCE install.packages("randomForest")
+# ONCE install.packages("FactoMineR")
+# ONCE install.packages("caret")
+# ONCE install.packages("rpart")
+# ONCE install.packages("rattle")
+library(sqldf)
+library(ggplot2)
+library(class)
+library(e1071)
+library(randomForest)
+library(FactoMineR)
+library(caret)
+library(dplyr)
+library(RColorBrewer)
+library(rpart)
+library(rattle)
+library(rpart.plot)
+```
+
+# Introduction
+
+Human brains process images nearly non-stop. If a person wrote a number, another person should be able to recognize and classify it very quickly -- with the possible exceptions of it being written by a child. In most circumstances, this is fast enough that there is no need to improve the speed. What if thousands of handwritten numbers need to be processed at a time? Hundreds of thousands? Millions? 
+
+Computer vision to the rescue! Data scientists in machine learning train computers automate that processing through interpretation of each pixel. Per "Everything You Ever Wanted To Know About Computer Vision.", accuracy for computers has reached 99% accuracy. The market for computer vision is rapidly increasing and is no longer concerned simply with distinguishing and classifying hand-writing. Computer vision has applications in medicine, military, self-driving cars, the Census bureau, and the postal service -- to name a few. 
+
+
+
+# Analysis and Models
+
+## About the Data
+
+The MNIST dataset is the beginner's guide to computer vision. The dataset focuses on handwritten digits from 0 to 9. The dataset, as pulled from Kaggle, contains 42,000 training examples and a further 28,000 testing examples. The digits are made up of 28 pixels high by 28 pixels wide, 784 pixels in total, each in grayscale. In terms of memory, this is expensive.
+
+```{r mnist,include=FALSE}
+trainset <- read.csv("C://Users//patty//OneDrive//IST707 Spring 2020//Week 7//Kaggle-digit-train.csv",header=TRUE,stringsAsFactors=TRUE)
+trainset$label <- as.factor(trainset$label)
+dim(trainset)
+# head(trainset)
+```
+
+As a result, the models were trained on 25% of the training dataset. Models use varying number of pixels. The variance in the model sizes is due to computational cost and error issues of each model. The digit 1 appears most frequently at 1250 times of 10,500 and 5 appears least frequently at 919 times. Only 2 and 5 appear less than 1000 times.
+
+```{r PCA, include = TRUE, echo=FALSE}
+pca_digits <- PCA(t(select(trainset,-label)))
+DigitTotalDF <- data.frame(trainset$label,pca_digits$var$coord)
+percent <- .25
+set.seed(275)
+DigitSplit <- sample(nrow(DigitTotalDF),nrow(DigitTotalDF)*percent)
+DigitDF <- DigitTotalDF[DigitSplit,]
+colnames(DigitDF)[1] <- "label"
+dim(DigitDF)
+nrow(DigitDF)
+# Accuracy rates
+get_accuracy_rate <- function(results_table,total_cases){
+  diagonal_sum <- sum(c(results_table[[1]],results_table[[12]], results_table[[23]], results_table[[34]],results_table[[45]],results_table[[56]],results_table[[67]],results_table[[78]],results_table[[89]],results_table[[100]]))
+  (diagonal_sum/total_cases)*100
+}
+
+```
+
+```{r EDA,include = TRUE, echo = FALSE}
+digit_freq <- sqldf("SELECT label, COUNT (label) as count
+                    FROM DigitDF
+                    GROUP BY label")
+ggplot(digit_freq, aes(x=reorder(label,-count),y=count,fill=label)) +
+  geom_bar(stat = "identity",fill=brewer.pal(10,"Spectral")) + xlab("Written Digit") + ylab("Frequency Count") + 
+  ggtitle("Written Digit by Frequency Count")
+```
+
+Each pixel contains a number between 0 and 255, which measures the lightness. In order to better view these measurements, they are grouped by 0, 1-50, 51-100, 101-150, 151-200, and 201-255. Zero is the most frequent measurement and nothing is in the 201-255 range. 
+
+```{r EDA4,include = TRUE,echo = FALSE}
+zero <- 0
+fifty <- 0
+one_hundred <- 0
+one_hundred_fifty <- 0
+two_hundred <- 0
+two_hundred_fifty_five <- 0
+for (col in colnames(trainset)){
+  if (col != "label"){
+    ifelse(trainset[,c(col)] == 0,zero <- zero + 1, ifelse(
+      trainset[,c(col)] < 51,fifty <- fifty + 1,ifelse(
+        trainset[,c(col)] < 101,one_hundred <- one_hundred + 1, ifelse(
+          trainset[,c(col)] < 151,one_hundred_fifty <- one_hundred_fifty + 1, ifelse(
+            trainset[,c(col)] < 201,two_hundred <- two_hundred + 1, two_hundred_fifty_five + 1
+            )
+          )
+        )
+      )
+    )
+  }
+} 
+color_bins <- data.frame("color_bin"=c("0","50","100","150","200","255"), "count" =c(zero,fifty,one_hundred,one_hundred_fifty,two_hundred,two_hundred_fifty_five))
+ggplot(color_bins,aes(x=reorder(color_bin,-count),y=count),fill=color_bin) +
+  geom_bar(stat="identity",fill=brewer.pal(6,"Spectral")) + xlab("Color Bin") + ylab("Frequency Count") +
+  ggtitle("Color Bin by Frequency Count")
+```
+
+```{r EDA1, include = TRUE, echo = FALSE}
+digit0 <- DigitDF[DigitDF$label==0,]
+avg0dim1 <- mean(digit0$Dim.1)
+avg0dim2 <- mean(digit0$Dim.2)
+avg0dim3 <- mean(digit0$Dim.3)
+avg0dim4 <- mean(digit0$Dim.4)
+avg0dim5 <- mean(digit0$Dim.5)
+digit0avg <- c(0,avg0dim1,avg0dim2,avg0dim3,avg0dim4,avg0dim5)
+digit1 <- DigitDF[DigitDF$label==1,]
+avg1dim1 <- mean(digit1$Dim.1)
+avg1dim2 <- mean(digit1$Dim.2)
+avg1dim3 <- mean(digit1$Dim.3)
+avg1dim4 <- mean(digit1$Dim.4)
+avg1dim5 <- mean(digit1$Dim.5)
+digit1avg <- c(1,avg1dim1,avg1dim2,avg1dim3,avg1dim4,avg1dim5)
+digit2 <- DigitDF[DigitDF$label==2,]
+avg2dim1 <- mean(digit2$Dim.1)
+avg2dim2 <- mean(digit2$Dim.2)
+avg2dim3 <- mean(digit2$Dim.3)
+avg2dim4 <- mean(digit2$Dim.4)
+avg2dim5 <- mean(digit2$Dim.5)
+digit2avg <- c(2,avg2dim1,avg2dim2,avg2dim3,avg2dim4,avg2dim5)
+digit3 <- DigitDF[DigitDF$label==3,]
+avg3dim1 <- mean(digit3$Dim.1)
+avg3dim2 <- mean(digit3$Dim.2)
+avg3dim3 <- mean(digit3$Dim.3)
+avg3dim4 <- mean(digit3$Dim.4)
+avg3dim5 <- mean(digit3$Dim.5)
+digit3avg <- c(3,avg3dim1,avg3dim2,avg3dim3,avg3dim4,avg3dim5)
+digit4 <- DigitDF[DigitDF$label==4,]
+avg4dim1 <- mean(digit4$Dim.1)
+avg4dim2 <- mean(digit4$Dim.2)
+avg4dim3 <- mean(digit4$Dim.3)
+avg4dim4 <- mean(digit4$Dim.4)
+avg4dim5 <- mean(digit4$Dim.5)
+digit4avg <- c(4,avg4dim1,avg4dim2,avg4dim3,avg4dim4,avg4dim5)
+digit5 <- DigitDF[DigitDF$label==5,]
+avg5dim1 <- mean(digit5$Dim.1)
+avg5dim2 <- mean(digit5$Dim.2)
+avg5dim3 <- mean(digit5$Dim.3)
+avg5dim4 <- mean(digit5$Dim.4)
+avg5dim5 <- mean(digit5$Dim.5)
+digit5avg <- c(5,avg5dim1,avg5dim2,avg5dim3,avg5dim4,avg5dim5)
+digit6 <- DigitDF[DigitDF$label==6,]
+avg6dim1 <- mean(digit6$Dim.1)
+avg6dim2 <- mean(digit6$Dim.2)
+avg6dim3 <- mean(digit6$Dim.3)
+avg6dim4 <- mean(digit6$Dim.4)
+avg6dim5 <- mean(digit6$Dim.5)
+digit6avg <- c(6,avg6dim1,avg6dim2,avg6dim3,avg6dim4,avg6dim5)
+digit7 <- DigitDF[DigitDF$label==7,]
+avg7dim1 <- mean(digit7$Dim.1)
+avg7dim2 <- mean(digit7$Dim.2)
+avg7dim3 <- mean(digit7$Dim.3)
+avg7dim4 <- mean(digit7$Dim.4)
+avg7dim5 <- mean(digit7$Dim.5)
+digit7avg <- c(7,avg7dim1,avg7dim2,avg7dim3,avg7dim4,avg7dim5)
+digit8 <- DigitDF[DigitDF$label==8,]
+avg8dim1 <- mean(digit8$Dim.1)
+avg8dim2 <- mean(digit8$Dim.2)
+avg8dim3 <- mean(digit8$Dim.3)
+avg8dim4 <- mean(digit8$Dim.4)
+avg8dim5 <- mean(digit8$Dim.5)
+digit8avg <- c(8,avg8dim1,avg8dim2,avg8dim3,avg8dim4,avg8dim5)
+digit9 <- DigitDF[DigitDF$label==9,]
+avg9dim1 <- mean(digit9$Dim.1)
+avg9dim2 <- mean(digit9$Dim.2)
+avg9dim3 <- mean(digit9$Dim.3)
+avg9dim4 <- mean(digit9$Dim.4)
+avg9dim5 <- mean(digit9$Dim.5)
+digit9avg <- c(9,avg9dim1,avg9dim2,avg9dim3,avg5dim4,avg9dim5)
+digitAvg <- data.frame(digit0avg,digit1avg,digit2avg,digit3avg,digit4avg,digit5avg,digit6avg,digit7avg,digit8avg,digit9avg)
+digitAvg <- t(digitAvg)
+colnames(digitAvg) <- c("label","avgDim1","avgDim2","avgDim3","avgDim4","avgDim5")
+opar <- par(oma=c(0,0,0,3))
+barplot(digitAvg[,2:6],beside=TRUE,ylim=c(-0.75,0.75),col=brewer.pal(10,"Spectral"),main = "Average Lightness of 5 Dimensions -- All Digits",cex.names=.6)
+opar <-  par(oma = c(0,0,0,0), mar = c(0,0,0,0), new = TRUE)
+legend(x = "right", legend = c(0,1,2,3,4,5,6,7,8,9), fill =brewer.pal(10,"Spectral"), bty = "n", y.intersp = 2)
+```
+
+For the models that use only five pixels, the first pixel used does not prove to have a significant difference in average brightness of the digits. The four additional pixels' average brightness varies greatly, and when used together, will aid in classifying the digits. When studying the boxplot, dimensions 2 and 4 have consistently the widest variance between values for each individual digit. 
+
+```{r EDA2,include = TRUE, echo=FALSE}
+par(mfrow = c(2,5))
+boxplot(digit0[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 0",cex=0.4)
+boxplot(digit1[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 1",cex=0.4)
+boxplot(digit2[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 2",cex=0.4)
+boxplot(digit3[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 3",cex=0.4)
+boxplot(digit4[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 4",cex=0.4)
+boxplot(digit5[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 5",cex=0.4)
+boxplot(digit6[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 6",cex=0.4)
+boxplot(digit7[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 7",cex=0.4)
+boxplot(digit8[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 8",cex=0.4)
+boxplot(digit9[2:6],col=brewer.pal(5,"Spectral"),main = "Dimensions for 9",cex=0.4)
+```
+
+```{r kfold, echo = FALSE}
+N <- nrow(DigitDF)
+kfolds <- 10
+holdout <- split(sample(1:N),1:kfolds)
+# head(holdout)
+```
+
+For all models, the holdout method of testing the training dataset was used with ten folds. The data was split into ten folds using random sampling. Each split is held out as the test once and is part of the training set nine times. 
+
+## Model 1
+
+The first model used is the Naive-Bayes model. The Naive-Bayes model uses joint probability to determine which digit the dimensions indicate. For the Naive-Bayes model, the reduced dimensionality data frame is used and only five dimensions remain. All results for the Naive-Bayes model are combined into the AllResultsNB dataframe to use for a confusion matrix. In the plots below, each of the ten folds are plotted to show which digits are most indicated. Computationally, the Naive-Bayes method was very small. It took less than 5 seconds to return all ten folds.
+
+```{r nb,include = TRUE,echo=FALSE}
+AllResultsNB <- data.frame(orig = c(),pred = c())
+for (k in 1:kfolds){
+  DigitDF_Test <- DigitDF[holdout[[k]],]
+  DigitDF_Test <- na.omit(DigitDF_Test)
+  DigitDF_Train <- DigitDF[-holdout[[k]],]
+  DigitDF_Test_noLabel <- DigitDF_Test[-c(1)]
+  DigitDF_Test_justLabel <- DigitDF_Test[c(1)]
+  train_naibayes <- naiveBayes(label~.,data = DigitDF_Train,na.action = na.pass)
+  train_naibayes
+  summary(train_naibayes)
+  nb_Pred <- predict(train_naibayes, DigitDF_Test_noLabel)
+  nb_Pred
+  confusionMatrix(nb_Pred,DigitDF_Test$label)
+  AllResultsNB <- rbind(AllResultsNB,data.frame(orig = DigitDF_Test_justLabel$label,pred = nb_Pred))
+  plot(nb_Pred,ylab = "Density",main="Naive Bayes Plot",col=brewer.pal(10,"Spectral"))
+}
+```
+
+As the plots show, the predictions indicate that 2 and 5 occur infrequently in the dataset. Conversely, the digits 1, 6, and 7 are frequently predicted.
+
+## Model 2
+
+The second model uses decision trees to predict the digit. The decision tree for each fold requires a minimun split of 2 and a maximum depth for the tree of 4. Across all trees, the digits 5 and 8 are deficient as they are never predicted. In 2 folds, the digit 2 is also not predicted. The decision tree model used the dimensionally reduced data like the Naive-Bayes model used. Computationally, it uses more resources than the previous model though still speedy. Results, with two plots per fold, were returned in less than 15 seconds.
+
+```{r dt, include = TRUE, echo = FALSE}
+AllResultsDT <- data.frame(orig = c(),pred = c())
+for(k in 1:kfolds){
+  DigitDF_Test <- DigitDF[holdout[[k]],]
+  DigitDF_Test <- na.omit(DigitDF_Test)
+  DigitDF_Train <- DigitDF[-holdout[[k]],]
+  DigitDF_Test_noLabel <- DigitDF_Test[-c(1)]
+  DigitDF_Test_justLabel <- DigitDF_Test[c(1)]
+  train_tree <- rpart(label~.,data = DigitDF_Train,na.action = na.pass,method="class",control = rpart.control(cp=0,minsplit = 2,maxdepth = 4))
+  train_tree
+  summary(train_tree)
+  dt_Pred <- predict(train_tree,DigitDF_Test_noLabel,type = "class")
+  dt_Pred
+  confusionMatrix(dt_Pred,DigitDF_Test$label)
+  AllResultsDT <- rbind(AllResultsDT,data.frame(orig = DigitDF_Test_justLabel$label,pred = dt_Pred))
+  fancyRpartPlot(train_tree,palettes = "Spectral",main = "Decision Tree")
+  plot(dt_Pred,ylab = "Density",main="Decision Tree Plot",col=brewer.pal(10,"Spectral"))
+}
+```
+
+## Model 3
+
+When it was run with only the five dimensions as the Naive-Bayes and the Decision Tree were, K-Nearest Neighbors returned an error Therefore, all dimensions were included. While decision trees and Naive-Bayes are machine learning algorithms, K-Nearest Neighbors is an instance-based learning algorithm. Because it does not train the data, all calculation of distance comes during the prediction step, making it have a high computational cost. For this dataset, K-Nearest Neighbors took nearly 8 minutes to run.
+
+```{r knnDF,include = FALSE,echo=FALSE}
+# DigitDF returned 100% accuracy for KNN. Trying the random sample from Dr. Bolton's repo.
+percent <- 0.25
+dimReduce <- 0.10
+set.seed(275)
+DigitSplit <- sample(nrow(trainset),nrow(trainset)*percent)
+trainset2 <- trainset[DigitSplit,]
+dim(trainset2)
+```
+
+```{r knn, include = TRUE,echo = FALSE}
+k_guess <- round(sqrt(nrow(trainset2)))
+AllResultsKNN <- data.frame(orig=c(),pred=c())
+for (k in 1:kfolds){
+  new_Test <- trainset2[holdout[[k]],]
+  new_Test<-na.omit(new_Test)
+  new_Train <- trainset2[-holdout[[k]],]
+  new_Test_noLabel <- new_Test[-c(1)]
+  new_Test_justLabel <- new_Test[c(1)]
+  knnPred <- knn(train=new_Train,test=new_Test,cl=new_Train$label,k=k_guess,prob=FALSE)
+  AllResultsKNN <- rbind(AllResultsKNN,data.frame(orig = new_Test_justLabel,pred=knnPred))
+ }
+```
+
+## Model 4
+
+The fourth model, a support vector machine, also could not use only the five dimensions therefore, like K-Nearest Neighbors, it uses all of the pixels. As support vector machines attempt to find the hyperplane on which to separate the data, for this dataset, the computational cost is high. It took over 37 minutes for the best hyperplane to be found. When it was finished, all digits were classified as 1. As a support vector machine is built to classify binary options, this dataset is not well-suited to its use.
+
+```{r SVM,include=TRUE,echo=FALSE, message = FALSE, warning = FALSE}
+svm_trainset <- trainset2
+AllResultsSVM <- data.frame(orig=c(),pred=c())
+for (k in 1:kfolds){
+  new_test <- svm_trainset[holdout[[k]],]
+  new_test<-na.omit(new_test)
+  new_train <- svm_trainset[-holdout[[k]],]
+  new_test_noLabel <- new_test[-c(1)]
+  new_test_justLabel <- new_test[c(1)]
+  test_model <- svm(label ~ ., new_train, na.action = na.pass)
+  SVMpred <- predict(test_model,new_test_noLabel,type=c("class"))
+  AllResultsSVM <- rbind(AllResultsSVM,data.frame(orig = new_test_justLabel$label,pred = SVMpred))
+ }
+```
+
+## Model 5
+
+At over 49 minutes to run, the fifth model is the most computationally costly. The reason is two-fold. One, it is a random forest model which makes several decision trees then the average is taken of each tree's prediction. Two, in this case, all of the dimensions were used. 
+
+```{r RF,include=TRUE,echo=FALSE}
+AllResultsRF <- data.frame(orig = c(),pred = c())
+for (k in 1:kfolds){
+  new_test <- trainset2[holdout[[k]],]
+  new_test <- na.omit(new_test)
+  new_train <-trainset2[-holdout[[k]],]
+  new_test_no_label <- new_test[-c(1)]
+  new_test_just_label <- new_test[c(1)]
+  test_model <- randomForest(label ~ ., new_train,na.action=na.pass)
+  RFpred <- predict(test_model, new_test_no_label,type = c("class"))
+  AllResultsRF <- rbind(AllResultsRF,data.frame(orig = new_test_just_label$label,pred=RFpred))
+}
+```
+
+# Results
+## Naive Bayes Results
+
+In terms of accuracy, Naive-Bayes was decently accurate at 64.49%. Given that the most frequent digit, 1, represents 11.% of the dataset, the Naive-Bayes Model is acceptably accurate. The digit 9 was both the least precise and had the least recall at 50.4% and 37.4% respectively. This means that 9 was correctly classified only 37.4% of the 1009 times it appeared in the dataet. Of the 748 times that the digit 9 was predicted, only 50.4% of the time was it correctly predicted. The digit 0 was most precise at 84.6% while the digit 1 had the best recall at 89.5%. 
+
+```{r resultsNB,include=TRUE,echo=FALSE}
+tabNB <- table(AllResultsNB$orig,AllResultsNB$pred)
+tabNB
+accuracyNB <- get_accuracy_rate(tabNB,length(AllResultsNB$pred))
+tabNBsums <- addmargins(tabNB)
+print("Naive-Bayes Accuracy Rate: ")
+accuracyNB
+```
+
+
+## Decision Tree Results
+
+While the decision tree model is less accurate than the Naive-Bayes model, it is still a viable model with an accuracy of 50.1%. Where it fails is in precision and accuracy for the digits 5 and 8. As previously noted, it could not accurately identify either of these and did not predict either of these numbers, even incorrectly. The digit 1 was the most precise and had the best recall at 89.9% and 85.2% respectively.
+
+```{r resultsDT,include=TRUE,echo=FALSE}
+tabDT <- table(AllResultsDT$orig,AllResultsDT$pred)
+tabDT
+accuracyDT <- get_accuracy_rate(tabDT,length(AllResultsDT$pred))
+tabDTsums <- addmargins(tabDT)
+print("Decision Trees Accuracy Rate: ")
+accuracyDT
+```
+
+## K-Nearest Neighbor Results
+
+K-Nearest Neighbor is the second most accurate of the models at 88.8%. Interestingly, the digit with the highest precicion has the worst recall and the digit with the highest recall has the worst precision. 2 is highly precise at 98.6%. The recall for 1, at 99.5%, is the highest of any model. This means, if 1 is the prediction, it is fairly certain that it is, in fact, a 1. 
+
+```{r resultsKNN,include = TRUE, echo = FALSE}
+tabKNN <- table(AllResultsKNN$label,AllResultsKNN$pred)
+tabKNN
+accuracyKNN <- get_accuracy_rate(tabKNN,length(AllResultsKNN$pred))
+tabKNNsums <- addmargins(tabKNN)
+print("K-NearestNeighbors Accuracy Rate: ")
+accuracyKNN
+```
+
+## Support Vector Machine Results
+
+As noted earlier, the support vector machine classified everything as a 1, leading to an accuracy rate of only 11.6%. This dataset would need more transformation in order to be usable with a support vector machine in terms of accuracy. 
+
+```{r resultsSVM,include=TRUE,echo=FALSE}
+tabSVM <- table(AllResultsSVM$orig,AllResultsSVM$pred)
+tabSVM
+tabSVMsums <- addmargins(tabSVM)
+accuracySVM <- get_accuracy_rate(tabSVM,length(AllResultsSVM$pred))
+print("Support Vector Machine Accuracy Rate: ")
+accuracySVM
+```
+
+## Random Forest Results
+
+While the computational cost of the random forest model is high, it is well worth it with an accuracy of 95.1%. Within this model, the highest precision is 97.2% for the digit 1. Meanwhile, the lowest is 92.5% for 9. Recall sees similar levels of success with a high of 98.5% for 1 and a low of 92.5% for 9. 
+
+```{r resultsRF,include=TRUE,echo=FALSE}
+tabRF <- table(AllResultsRF$orig,AllResultsRF$pred)
+tabRF
+tabRFsums <- addmargins(tabRF)
+accuracyRF <- get_accuracy_rate(tabRF,length(AllResultsRF$pred))
+print("Random Forest Accuracy Rate: ")
+accuracyRF
+````
+
+# Conclusion
+
+Computer vision has many practical applications. In some cases, such as MRI scans, the cost in time and effort for the computation may well be worth every bit of it. In others, such as the handwritten numbers, it is likely not. Had there been a person reading 10,500 handwritten digits, it would take less than 30 minutes to get through all of them. Yet two models took more than that and the support vector machine model was wildly inaccurate. 
+
+Is computer vision the wave of the future? Clearly it is, between augmented reality, MRI results, and self-driving cars. There are, however, better and worse models for it. Given the models and results received, if high accuracy is needed, the recommendation would be to use a random forest model. If high speed with high accuracy is needed, use K-Nearest Neighbors. 
+
+
